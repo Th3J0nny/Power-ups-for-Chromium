@@ -1,7 +1,7 @@
 # Power-ups-for-Chromium
 
 This repository contains work of the Bachelor Thesis: 
-- [Power-ups for Chromium: Facilitate Side-Channel Research](TBD) by Jonathan Busch (Saarland University)
+- [Power-ups for Chromium: Facilitate Side-Channel Research](thesis_cyber_bsc_Busch_Jonathan.pdf) by Jonathan Busch (Saarland University)
 - First Reviewer: [Dr. Michael Schwarz](https://cispa.de/de/people/c02misc)
 - Second Reviewer: [Dr. Cristian-Alexandru Staicu](https://cispa.de/de/people/c01crst)
 
